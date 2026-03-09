@@ -1,0 +1,84 @@
+add_note:
+  name: Notitie toevoegen
+  description: Voeg een nieuwe notitie toe aan de Notes Manager.
+  fields:
+    title:
+      name: Titel
+      description: De titel van de notitie.
+      required: true
+      example: "Boodschappenlijst"
+      selector:
+        text:
+    content:
+      name: Inhoud
+      description: De inhoud van de notitie.
+      required: false
+      example: "Melk, brood, eieren"
+      selector:
+        text:
+          multiline: true
+    color:
+      name: Kleur
+      description: De kleur van de notitie.
+      required: false
+      default: yellow
+      example: "yellow"
+      selector:
+        select:
+          options:
+            - yellow
+            - blue
+            - green
+            - pink
+            - purple
+            - orange
+
+update_note:
+  name: Notitie bijwerken
+  description: Werk een bestaande notitie bij.
+  fields:
+    note_id:
+      name: Notitie ID
+      description: Het unieke ID van de notitie om bij te werken.
+      required: true
+      example: "abc123-..."
+      selector:
+        text:
+    title:
+      name: Titel
+      description: De nieuwe titel van de notitie.
+      required: false
+      selector:
+        text:
+    content:
+      name: Inhoud
+      description: De nieuwe inhoud van de notitie.
+      required: false
+      selector:
+        text:
+          multiline: true
+    color:
+      name: Kleur
+      description: De nieuwe kleur van de notitie.
+      required: false
+      selector:
+        select:
+          options:
+            - yellow
+            - blue
+            - green
+            - pink
+            - purple
+            - orange
+
+delete_note:
+  name: Notitie verwijderen
+  description: Verwijder een notitie uit de Notes Manager.
+  fields:
+    note_id:
+      name: Notitie ID
+      description: Het unieke ID van de notitie om te verwijderen.
+      required: true
+      example: "abc123-..."
+      selector:
+        text:

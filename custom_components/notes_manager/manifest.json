@@ -1,0 +1,13 @@
+{
+  "domain": "notes_manager",
+  "name": "Notes Manager",
+  "version": "1.0.0",
+  "documentation": "https://github.com/StijnHemelings/ha-notes-manager",
+  "issue_tracker": "https://github.com/StijnHemelings/ha-notes-manager/issues",
+  "codeowners": ["@StijnHemelings"],
+  "requirements": [],
+  "dependencies": [],
+  "config_flow": false,
+  "iot_class": "local_push",
+  "integration_type": "hub"
+}

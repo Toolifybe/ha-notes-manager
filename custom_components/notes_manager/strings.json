@@ -1,0 +1,11 @@
+{
+  "title": "Notes Manager",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Notes Manager instellen",
+        "description": "Voeg de Notes Manager toe aan Home Assistant."
+      }
+    }
+  }
+}
