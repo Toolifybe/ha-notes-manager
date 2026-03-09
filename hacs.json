@@ -5,5 +5,7 @@
   "domains": ["notes_manager"],
   "documentation": "https://github.com/StijnHemelings/ha-notes-manager",
   "issue_tracker": "https://github.com/StijnHemelings/ha-notes-manager/issues",
-  "homeassistant": "2023.1.0"
+  "homeassistant": "2023.1.0",
+  "filename": "notes-manager-card.js",
+  "content_in_root": false
 }
