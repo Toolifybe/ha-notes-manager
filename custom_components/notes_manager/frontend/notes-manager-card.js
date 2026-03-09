@@ -3,7 +3,7 @@
  * v2.0.0 - With Markdown, Checklists, Images & Clickable Links
  */
 
-const CARD_VERSION = "2.0.0";
+const CARD_VERSION = "2.1.0";
 
 // Minimal Markdown renderer (bold, italic, headings, links, code)
 function renderMarkdown(text) {
@@ -55,9 +55,9 @@ class NotesManagerCard extends HTMLElement {
     }
   }
 
-  setConfig(config) { this._config = config || {}; }
+  setConfig(config) { this._config = config || {}; this._title = config?.title || '📝 Notities'; }
   getCardSize() { return 4; }
-  static getStubConfig() { return {}; }
+  static getStubConfig() { return { title: "📝 Notities" }; }
 
   async _fetchNotes() {
     try {
@@ -183,7 +183,7 @@ class NotesManagerCard extends HTMLElement {
 
       <ha-card>
         <div class="card-header">
-          <span class="card-title">📝 Notities</span>
+          <span class="card-title">${this._title}</span>
           <div class="header-actions">
             <button class="add-btn" id="add-btn" title="Nieuwe notitie">+</button>
           </div>
