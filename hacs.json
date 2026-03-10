@@ -3,8 +3,8 @@
   "description": "A simple notes manager integration for Home Assistant. Create, edit and delete notes from your dashboard.",
   "render_readme": true,
   "domains": ["notes_manager"],
-  "documentation": "https://github.com/StijnHemelings/ha-notes-manager",
-  "issue_tracker": "https://github.com/StijnHemelings/ha-notes-manager/issues",
+  "documentation": "https://github.com/toolifybe/ha-notes-manager",
+  "issue_tracker": "https://github.com/toolifybe/ha-notes-manager/issues",
   "homeassistant": "2023.1.0",
   "filename": "notes-manager-card.js",
   "content_in_root": false
