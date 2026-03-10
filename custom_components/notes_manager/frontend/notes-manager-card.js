@@ -3,7 +3,7 @@
  * v2.3.0 - Categories + Timezone fix
  */
 
-const CARD_VERSION = "2.5.0";
+const CARD_VERSION = "2.5.1";
 
 function renderMarkdown(text) {
   if (!text) return "";
@@ -45,6 +45,25 @@ class NotesManagerCard extends HTMLElement {
     this._searchQuery = "";
     this._activeCategory = "all";
     this._categories = [];
+    this._title = "📝 Notities";
+    // Default labels — overridden by setConfig if labels are provided
+    this._l = {
+      type_text: "📝 Tekst", type_checklist: "✅ Checklist", type_numbered: "🔢 Genummerd",
+      field_title: "Titel", field_content: "Inhoud", field_category: "📁 Categorie",
+      field_reminder: "⏰ Herinnering (optioneel)", field_images: "Afbeeldingen", field_color: "Kleur",
+      btn_save: "Opslaan", btn_cancel: "Annuleren", btn_add_task: "+ Taak toevoegen",
+      btn_add_item: "+ Item toevoegen", pin_label: "📌 Vastpinnen bovenaan",
+      no_category: "— Geen categorie —", new_category: "➕ Nieuwe categorie...",
+      new_category_placeholder: "Naam nieuwe categorie...", category_placeholder: "Naam nieuwe categorie...",
+      empty_state: "Geen notities. Klik op + om te beginnen.", empty_search: "Geen notities gevonden voor",
+      search_placeholder: "Zoek in notities...", filter_all: "Alle",
+      delete_title: "Notitie verwijderen?", delete_confirm: "Weet je zeker dat je deze notitie wilt verwijderen?",
+      btn_delete: "Verwijderen", modal_new: "Nieuwe Notitie", modal_edit: "Notitie bewerken",
+      markdown_hint: "(ondersteunt Markdown)", markdown_placeholder: "Schrijf je notitie hier...",
+      task_placeholder: "Taak omschrijving...", item_placeholder: "Item omschrijving...",
+      title_placeholder: "Voer een titel in...", image_upload: "📷 Klik of sleep een afbeelding hier",
+      pin_yes: "Losmaken", pin_no: "Vastpinnen", reminder_expired: "(verlopen)",
+    };
   }
 
   set hass(hass) {
