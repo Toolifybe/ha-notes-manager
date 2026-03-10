@@ -3,7 +3,7 @@
 A custom Home Assistant integration to create, edit, and delete notes directly from your dashboard.
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-![Version](https://img.shields.io/badge/version-2.1.3-blue.svg)
+![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)
 
 ---
 
@@ -13,10 +13,18 @@ A custom Home Assistant integration to create, edit, and delete notes directly f
 - ✅ Edit existing notes
 - ✅ Delete notes with confirmation dialog
 - ✅ Choose from 6 note colors (yellow, blue, green, pink, purple, orange)
-- ✅ Notes are saved persistently in your HA config directory
-- ✅ Custom Lovelace card for your dashboard
+- ✅ **Markdown support** (bold, italic, headings, code, links)
+- ✅ **Checklist / task notes**
+- ✅ **Image upload** with lightbox viewer
+- ✅ **Clickable links** (auto-detected)
+- ✅ **Search** through all notes (title, content, tasks)
+- ✅ **Pin notes** to keep them at the top
+- ✅ **Reminders** with date & time picker
+- ✅ Notes sorted by most recently updated
+- ✅ Notes saved persistently in your HA config directory
+- ✅ Frontend JS auto-copied on every HA restart (no manual updates)
+- ✅ Configurable card title
 - ✅ Automation support via HA services
-- ✅ Sorted by most recently updated
 
 ---
 
@@ -26,7 +34,7 @@ A custom Home Assistant integration to create, edit, and delete notes directly f
 
 1. Open **HACS** in Home Assistant
 2. Click **Integrations** → **⋮ (three dots)** → **Custom repositories**
-3. Add the URL: `https://github.com/StijnHemelings/ha-notes-manager`
+3. Add the URL: `https://github.com/YOUR_GITHUB_USERNAME/ha-notes-manager`
 4. Category: **Integration**
 5. Click **Add**
 
@@ -54,11 +62,21 @@ In your Lovelace dashboard:
 type: custom:notes-manager-card
 ```
 
-Or add the resource manually (Settings → Dashboards → Resources):
+Optionally set a custom title:
 
+```yaml
+type: custom:notes-manager-card
+title: "🛒 Boodschappen"
 ```
-/local/community/ha-notes-manager/notes-manager-card.js
-```
+
+### Step 5: Add the resource
+
+Go to **Settings → Dashboards → Resources** and add:
+
+- **URL:** `/local/community/ha-notes-manager/notes-manager-card.js`
+- **Type:** JavaScript module
+
+> 💡 The JS file is automatically copied to the correct location on every HA restart.
 
 ---
 
@@ -82,8 +100,6 @@ ha-notes-manager/
 
 ## ⚙️ Services
 
-You can use these services in automations:
-
 ### `notes_manager.add_note`
 
 | Field     | Type   | Required | Description            |
@@ -101,8 +117,6 @@ data:
   color: green
 ```
 
----
-
 ### `notes_manager.update_note`
 
 | Field      | Type   | Required | Description                  |
@@ -111,8 +125,6 @@ data:
 | `title`    | string | ❌        | New title                    |
 | `content`  | string | ❌        | New content                  |
 | `color`    | string | ❌        | New color                    |
-
----
 
 ### `notes_manager.delete_note`
 
@@ -124,8 +136,6 @@ data:
 
 ## 📡 API Endpoints
 
-The integration exposes REST API endpoints (requires authentication):
-
 | Method   | Endpoint                                 | Description          |
 |----------|------------------------------------------|----------------------|
 | `GET`    | `/api/notes_manager/notes`               | Get all notes        |
@@ -135,31 +145,62 @@ The integration exposes REST API endpoints (requires authentication):
 
 ---
 
+## 📝 Markdown Support
+
+In text notes you can use:
+
+| Syntax | Result |
+|--------|--------|
+| `**vet**` | **vet** |
+| `*cursief*` | *cursief* |
+| `# Kop` | Heading |
+| `` `code` `` | `code` |
+| `[tekst](url)` | clickable link |
+
+---
+
 ## 🎨 Available Colors
 
-| Color    | Preview |
-|----------|---------|
-| yellow   | 🟡      |
-| blue     | 🔵      |
-| green    | 🟢      |
-| pink     | 🩷      |
-| purple   | 🟣      |
-| orange   | 🟠      |
+`yellow` 🟡 &nbsp; `blue` 🔵 &nbsp; `green` 🟢 &nbsp; `pink` 🩷 &nbsp; `purple` 🟣 &nbsp; `orange` 🟠
 
 ---
 
 ## 💾 Data Storage
 
-Notes are stored in a JSON file at:
+Notes are stored in:
 ```
 <HA config directory>/notes_manager_data.json
 ```
 
 ---
 
+## 📋 Changelog
+
+### v2.2.0
+- 🔍 Search through all notes (title, content, tasks)
+- 📌 Pin notes to keep them at the top
+- ⏰ Reminders with date & time picker
+
+### v2.1.x
+- 🐛 Fixed checklist input text visibility
+- 🐛 Fixed checklist layout on mobile
+- 🔄 Auto-copy frontend JS on HA restart
+- 🏷️ Configurable card title
+
+### v2.0.0
+- ✅ Checklist / task notes
+- 📝 Markdown support
+- 📷 Image upload with lightbox
+- 🔗 Clickable links
+
+### v1.0.0
+- 🎉 Initial release
+
+---
+
 ## 🐛 Issues & Contributions
 
-Found a bug or want to contribute?  
+Found a bug or want to contribute?
 → [Open an issue](https://github.com/YOUR_GITHUB_USERNAME/ha-notes-manager/issues)
 
 ---
