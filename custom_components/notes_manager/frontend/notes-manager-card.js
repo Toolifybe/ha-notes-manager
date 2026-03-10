@@ -3,7 +3,7 @@
  * v2.0.0 - With Markdown, Checklists, Images & Clickable Links
  */
 
-const CARD_VERSION = "2.1.0";
+const CARD_VERSION = "2.1.1";
 
 // Minimal Markdown renderer (bold, italic, headings, links, code)
 function renderMarkdown(text) {
@@ -151,8 +151,8 @@ class NotesManagerCard extends HTMLElement {
         /* Checklist editor */
         .checklist-editor { display:flex; flex-direction:column; gap:6px; }
         .checklist-row { display:flex; align-items:center; gap:6px; }
-        .checklist-row input[type=text] { flex:1; padding:6px 8px; border:1px solid var(--divider-color,#ddd); border-radius:5px; font-size:.9em; background:var(--input-fill-color,#f5f5f5); color:var(--primary-text-color); }
-        .checklist-row button { background:none; border:none; cursor:pointer; font-size:16px; padding:2px 4px; border-radius:4px; }
+        .checklist-row input[type=text] { flex:1; min-width:0; padding:8px 10px; border:1px solid var(--divider-color,#ddd); border-radius:5px; font-size:.9em; background:#ffffff; color:#212121; box-sizing:border-box; font-family:inherit; }
+        .checklist-row button { background:none; border:none; cursor:pointer; font-size:18px; padding:4px 8px; border-radius:4px; min-width:36px; min-height:36px; display:flex; align-items:center; justify-content:center; }
         .checklist-row button:hover { background:rgba(0,0,0,.1); }
         .add-item-btn { align-self:flex-start; background:none; border:1px dashed var(--primary-color); color:var(--primary-color); border-radius:6px; padding:5px 12px; cursor:pointer; font-size:.85em; margin-top:4px; }
         .add-item-btn:hover { background:rgba(25,118,210,.07); }
