@@ -1,9 +1,9 @@
 /**
  * Notes Manager Card for Home Assistant
- * v2.2.0 - Search, Pin & Reminders
+ * v2.3.0 - Categories + Timezone fix
  */
 
-const CARD_VERSION = "2.2.0";
+const CARD_VERSION = "2.3.0";
 
 function renderMarkdown(text) {
   if (!text) return "";
@@ -21,6 +21,20 @@ function renderMarkdown(text) {
     .replace(/\n/g, "<br>");
 }
 
+// Fix: convert ISO string to local datetime-local input value (no timezone shift)
+function isoToLocalInput(isoString) {
+  if (!isoString) return "";
+  const d = new Date(isoString);
+  const pad = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Fix: convert local datetime-local input value to ISO string preserving local time
+function localInputToIso(value) {
+  if (!value) return null;
+  return new Date(value).toISOString();
+}
+
 class NotesManagerCard extends HTMLElement {
   constructor() {
     super();
@@ -29,6 +43,8 @@ class NotesManagerCard extends HTMLElement {
     this._editingNote = null;
     this._initialized = false;
     this._searchQuery = "";
+    this._activeCategory = "all";
+    this._categories = [];
   }
 
   set hass(hass) {
@@ -51,6 +67,11 @@ class NotesManagerCard extends HTMLElement {
   async _fetchNotes() {
     try {
       this._notes = await this._hass.callApi("GET", "notes_manager/notes");
+      // Collect unique categories from notes
+      const cats = new Set();
+      this._notes.forEach(n => { if (n.category) cats.add(n.category); });
+      this._categories = [...cats].sort();
+      this._renderCategoryFilter();
       this._renderNotes();
     } catch (e) { console.error("Notes fetch error:", e); }
   }
@@ -84,23 +105,46 @@ class NotesManagerCard extends HTMLElement {
     }[color] || { bg: "#fff9c4", border: "#f9a825" };
   }
 
+  _renderCategoryFilter() {
+    const bar = this.shadowRoot.getElementById("category-bar");
+    if (!bar) return;
+    bar.innerHTML = "";
+
+    const all = document.createElement("button");
+    all.className = "cat-btn" + (this._activeCategory === "all" ? " active" : "");
+    all.textContent = "Alle";
+    all.addEventListener("click", () => { this._activeCategory = "all"; this._renderCategoryFilter(); this._renderNotes(); });
+    bar.appendChild(all);
+
+    this._categories.forEach(cat => {
+      const btn = document.createElement("button");
+      btn.className = "cat-btn" + (this._activeCategory === cat ? " active" : "");
+      btn.textContent = cat;
+      btn.addEventListener("click", () => { this._activeCategory = cat; this._renderCategoryFilter(); this._renderNotes(); });
+      bar.appendChild(btn);
+    });
+  }
+
   _render() {
     this.shadowRoot.innerHTML = `
       <style>
         :host { display:block; font-family:var(--paper-font-body1_-_font-family,'Roboto',sans-serif); }
         ha-card { padding:16px; }
-        /* Header */
         .card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
         .card-title { font-size:1.2em; font-weight:bold; color:var(--primary-text-color); }
         .header-actions { display:flex; gap:8px; align-items:center; }
         .add-btn { background:var(--primary-color); color:white; border:none; border-radius:50%; width:36px; height:36px; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 4px rgba(0,0,0,.3); transition:transform .2s; flex-shrink:0; }
         .add-btn:hover { transform:scale(1.1); }
         /* Search */
-        .search-bar { display:flex; align-items:center; background:var(--input-fill-color,#f5f5f5); border:1px solid var(--divider-color,#e0e0e0); border-radius:8px; padding:6px 10px; margin-bottom:14px; gap:6px; }
+        .search-bar { display:flex; align-items:center; background:var(--input-fill-color,#f5f5f5); border:1px solid var(--divider-color,#e0e0e0); border-radius:8px; padding:6px 10px; margin-bottom:10px; gap:6px; }
         .search-bar input { flex:1; border:none; background:transparent; color:var(--primary-text-color); font-size:.9em; outline:none; font-family:inherit; }
-        .search-bar .search-icon { color:var(--secondary-text-color); font-size:14px; }
         .search-bar .clear-btn { background:none; border:none; cursor:pointer; color:var(--secondary-text-color); font-size:16px; padding:0; line-height:1; display:none; }
         .search-bar .clear-btn.visible { display:block; }
+        /* Category filter bar */
+        .category-bar { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+        .cat-btn { background:none; border:1px solid var(--divider-color,#ddd); border-radius:20px; padding:4px 12px; font-size:.8em; cursor:pointer; color:var(--primary-text-color); transition:all .2s; white-space:nowrap; }
+        .cat-btn:hover { border-color:var(--primary-color); color:var(--primary-color); }
+        .cat-btn.active { background:var(--primary-color); border-color:var(--primary-color); color:white; }
         /* Notes grid */
         .notes-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:12px; }
         .note-card { border-radius:8px; padding:12px; position:relative; box-shadow:0 2px 6px rgba(0,0,0,.15); transition:box-shadow .2s; min-height:80px; }
@@ -114,47 +158,43 @@ class NotesManagerCard extends HTMLElement {
         .note-card:hover .note-actions { opacity:1; }
         .note-actions button { background:none; border:none; cursor:pointer; padding:2px 4px; border-radius:4px; font-size:13px; }
         .note-actions button:hover { background:rgba(0,0,0,.1); }
+        .note-category-badge { display:inline-block; font-size:.7em; background:rgba(0,0,0,.1); border-radius:10px; padding:1px 8px; margin-bottom:5px; color:rgba(0,0,0,.6); }
         .note-body { font-size:.85em; color:rgba(0,0,0,.75); word-break:break-word; }
         .note-body h1,.note-body h2,.note-body h3 { margin:4px 0; }
         .note-body h1 { font-size:1.1em; } .note-body h2 { font-size:1em; } .note-body h3 { font-size:.95em; }
         .note-body code { background:rgba(0,0,0,.08); padding:1px 4px; border-radius:3px; font-family:monospace; }
         .note-body a { color:#1565c0; }
         .note-date { font-size:.7em; color:rgba(0,0,0,.4); margin-top:8px; }
-        .note-reminder { font-size:.72em; color:#e65100; margin-top:4px; display:flex; align-items:center; gap:3px; }
+        .note-reminder { font-size:.72em; color:#e65100; margin-top:4px; }
         .note-reminder.expired { color:#c62828; }
-        /* Checklist on card */
         .checklist-item { display:flex; align-items:center; gap:6px; margin:3px 0; font-size:.85em; }
         .checklist-item input[type=checkbox] { cursor:pointer; width:14px; height:14px; flex-shrink:0; }
         .checklist-item.done span { text-decoration:line-through; opacity:.55; }
-        /* Images */
         .note-images { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
         .note-images img { width:60px; height:60px; object-fit:cover; border-radius:4px; cursor:pointer; }
-        /* Empty state */
         .empty-state { text-align:center; padding:32px 16px; color:var(--secondary-text-color); grid-column:1/-1; }
         .empty-state .icon { font-size:3em; margin-bottom:8px; }
-        /* Modal overlay */
+        /* Modal */
         .modal-overlay { display:none; position:fixed; top:0;left:0;right:0;bottom:0; background:rgba(0,0,0,.5); z-index:9999; align-items:center; justify-content:center; }
         .modal-overlay.open { display:flex; }
         .modal { background:var(--card-background-color,white); border-radius:12px; padding:24px; width:92%; max-width:520px; box-shadow:0 8px 32px rgba(0,0,0,.3); max-height:90vh; overflow-y:auto; }
         .modal h3 { margin:0 0 16px; color:var(--primary-text-color); }
         .form-group { margin-bottom:14px; }
         .form-group label { display:block; font-size:.85em; margin-bottom:4px; color:var(--secondary-text-color); font-weight:500; }
-        .form-group input,.form-group textarea { width:100%; padding:8px 10px; border:1px solid var(--divider-color,#e0e0e0); border-radius:6px; font-size:.95em; background:var(--input-fill-color,#f5f5f5); color:var(--primary-text-color); box-sizing:border-box; font-family:inherit; }
-        .form-group input[type=datetime-local] { color:var(--primary-text-color); }
+        .form-group input,.form-group textarea,.form-group select { width:100%; padding:8px 10px; border:1px solid var(--divider-color,#e0e0e0); border-radius:6px; font-size:.95em; background:var(--input-fill-color,#f5f5f5); color:var(--primary-text-color); box-sizing:border-box; font-family:inherit; }
         .form-group textarea { resize:vertical; min-height:90px; }
-        /* Type toggle */
+        .category-input-wrap { display:flex; gap:6px; }
+        .category-input-wrap input { flex:1; }
+        .category-input-wrap select { flex:1; }
         .type-toggle { display:flex; gap:8px; margin-bottom:14px; }
         .type-btn { flex:1; padding:7px; border:2px solid var(--divider-color,#ddd); border-radius:6px; background:none; cursor:pointer; font-size:.85em; transition:all .2s; color:var(--primary-text-color); }
         .type-btn.active { border-color:var(--primary-color); background:var(--primary-color); color:white; }
-        /* Pin toggle */
         .pin-toggle { display:flex; align-items:center; gap:8px; margin-bottom:14px; cursor:pointer; font-size:.9em; color:var(--primary-text-color); }
         .pin-toggle input { width:16px; height:16px; cursor:pointer; }
-        /* Color picker */
         .color-picker { display:flex; gap:8px; flex-wrap:wrap; }
         .color-option { width:28px; height:28px; border-radius:50%; border:3px solid transparent; cursor:pointer; transition:transform .2s; }
         .color-option:hover { transform:scale(1.2); }
         .color-option.selected { border-color:#1976d2 !important; }
-        /* Checklist editor */
         .checklist-editor { display:flex; flex-direction:column; gap:8px; }
         .checklist-row { display:flex; align-items:center; gap:8px; width:100%; }
         .checklist-row input[type=checkbox] { flex-shrink:0; width:18px; height:18px; cursor:pointer; margin:0; }
@@ -162,30 +202,24 @@ class NotesManagerCard extends HTMLElement {
         .checklist-row button:hover { background:rgba(0,0,0,.1); }
         .add-item-btn { align-self:flex-start; background:none; border:1px dashed var(--primary-color); color:var(--primary-color); border-radius:6px; padding:5px 12px; cursor:pointer; font-size:.85em; margin-top:4px; }
         .add-item-btn:hover { background:rgba(25,118,210,.07); }
-        /* Image upload */
         .image-upload-area { border:2px dashed var(--divider-color,#ddd); border-radius:8px; padding:16px; text-align:center; cursor:pointer; font-size:.85em; color:var(--secondary-text-color); margin-top:4px; }
         .image-upload-area:hover { border-color:var(--primary-color); }
         .image-previews { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
         .image-preview-wrap { position:relative; }
         .image-preview-wrap img { width:64px; height:64px; object-fit:cover; border-radius:6px; }
         .image-preview-wrap .remove-img { position:absolute; top:-6px; right:-6px; background:#e53935; color:white; border:none; border-radius:50%; width:18px; height:18px; font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
-        /* Modal actions */
         .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
         .btn { padding:8px 20px; border:none; border-radius:6px; cursor:pointer; font-size:.9em; font-weight:500; transition:filter .2s; }
         .btn-primary { background:var(--primary-color); color:white; }
         .btn-primary:hover { filter:brightness(.9); }
         .btn-secondary { background:var(--secondary-background-color,#e0e0e0); color:var(--primary-text-color); }
-        /* Confirm modal */
         .confirm-modal { background:var(--card-background-color,white); border-radius:12px; padding:24px; width:90%; max-width:340px; box-shadow:0 8px 32px rgba(0,0,0,.3); text-align:center; }
         .confirm-modal h3 { margin:0 0 10px; }
         .confirm-modal p { color:var(--secondary-text-color); font-size:.9em; }
-        /* Hint */
         .hint { font-size:.75em; color:var(--secondary-text-color); margin-top:3px; }
-        /* Lightbox */
         .lightbox { display:none; position:fixed; top:0;left:0;right:0;bottom:0; background:rgba(0,0,0,.85); z-index:99999; align-items:center; justify-content:center; cursor:zoom-out; }
         .lightbox.open { display:flex; }
         .lightbox img { max-width:90vw; max-height:90vh; border-radius:8px; box-shadow:0 4px 32px rgba(0,0,0,.5); }
-        /* Search highlight */
         mark { background:#fff176; border-radius:2px; padding:0 1px; }
       </style>
 
@@ -197,10 +231,11 @@ class NotesManagerCard extends HTMLElement {
           </div>
         </div>
         <div class="search-bar">
-          <span class="search-icon">🔍</span>
+          <span>🔍</span>
           <input type="text" id="search-input" placeholder="Zoek in notities..." />
           <button class="clear-btn" id="clear-search">✕</button>
         </div>
+        <div class="category-bar" id="category-bar"></div>
         <div class="notes-grid" id="notes-grid">
           <div class="empty-state"><div class="icon">📋</div><p>Geen notities. Klik op + om te beginnen.</p></div>
         </div>
@@ -228,7 +263,7 @@ class NotesManagerCard extends HTMLElement {
 
           <div class="form-group" id="text-section">
             <label>Inhoud <span style="font-weight:normal">(ondersteunt Markdown)</span></label>
-            <textarea id="note-content-input" placeholder="Schrijf je notitie hier...&#10;&#10;**vet**, *cursief*, # Kop, \`code\`, [link](url)"></textarea>
+            <textarea id="note-content-input" placeholder="Schrijf je notitie hier...&#10;**vet**, *cursief*, # Kop, \`code\`, [link](url)"></textarea>
             <div class="hint">**vet** &nbsp;|&nbsp; *cursief* &nbsp;|&nbsp; # Kop &nbsp;|&nbsp; \`code\` &nbsp;|&nbsp; [tekst](url)</div>
           </div>
 
@@ -236,6 +271,14 @@ class NotesManagerCard extends HTMLElement {
             <label>Taken</label>
             <div class="checklist-editor" id="checklist-editor"></div>
             <button class="add-item-btn" id="add-checklist-item">+ Taak toevoegen</button>
+          </div>
+
+          <div class="form-group">
+            <label>📁 Categorie</label>
+            <div class="category-input-wrap">
+              <input type="text" id="category-input" placeholder="Nieuwe categorie of kies bestaande..." list="category-list" />
+              <datalist id="category-list"></datalist>
+            </div>
           </div>
 
           <div class="form-group">
@@ -289,6 +332,7 @@ class NotesManagerCard extends HTMLElement {
       </div>
     `;
     this._setupEventListeners();
+    this._renderCategoryFilter();
   }
 
   _setupEventListeners() {
@@ -298,7 +342,7 @@ class NotesManagerCard extends HTMLElement {
     let pendingImages = [];
     let pendingDeleteId = null;
 
-    // --- Search ---
+    // Search
     const searchInput = r.getElementById("search-input");
     const clearBtn = r.getElementById("clear-search");
     searchInput.addEventListener("input", () => {
@@ -313,7 +357,7 @@ class NotesManagerCard extends HTMLElement {
       this._renderNotes();
     });
 
-    // --- Color picker ---
+    // Color
     const updateColorUI = (color) => {
       selectedColor = color;
       r.querySelectorAll(".color-option").forEach(el =>
@@ -321,7 +365,7 @@ class NotesManagerCard extends HTMLElement {
       );
     };
 
-    // --- Type toggle ---
+    // Type toggle
     const updateTypeUI = (type) => {
       selectedType = type;
       r.getElementById("type-text-btn").classList.toggle("active", type === "text");
@@ -330,35 +374,25 @@ class NotesManagerCard extends HTMLElement {
       r.getElementById("checklist-section").style.display = type === "checklist" ? "" : "none";
     };
 
-    // --- Checklist row ---
+    // Checklist row
     const addChecklistRow = (text = "", checked = false) => {
       const editor = r.getElementById("checklist-editor");
       const row = document.createElement("div");
       row.className = "checklist-row";
-
       const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.checked = checked;
-
+      cb.type = "checkbox"; cb.checked = checked;
       const inp = document.createElement("input");
-      inp.type = "text";
-      inp.placeholder = "Taak omschrijving...";
-      inp.value = text;
+      inp.type = "text"; inp.placeholder = "Taak omschrijving..."; inp.value = text;
       inp.style.cssText = "flex:1;min-width:0;padding:8px 10px;border:1px solid #aaa;border-radius:5px;font-size:.9em;background:#fff;color:#000;box-sizing:border-box;font-family:inherit;";
-
       const btn = document.createElement("button");
-      btn.title = "Verwijder";
-      btn.textContent = "🗑️";
+      btn.title = "Verwijder"; btn.textContent = "🗑️";
       btn.addEventListener("click", () => row.remove());
-
-      row.appendChild(cb);
-      row.appendChild(inp);
-      row.appendChild(btn);
+      row.appendChild(cb); row.appendChild(inp); row.appendChild(btn);
       editor.appendChild(row);
       inp.focus();
     };
 
-    // --- Image previews ---
+    // Image previews
     const renderImagePreviews = () => {
       const container = r.getElementById("image-previews");
       container.innerHTML = "";
@@ -367,29 +401,34 @@ class NotesManagerCard extends HTMLElement {
         wrap.className = "image-preview-wrap";
         wrap.innerHTML = `<img src="${src}" /><button class="remove-img">×</button>`;
         wrap.querySelector(".remove-img").addEventListener("click", () => {
-          pendingImages.splice(i, 1);
-          renderImagePreviews();
+          pendingImages.splice(i, 1); renderImagePreviews();
         });
         container.appendChild(wrap);
       });
     };
 
-    // --- Open modal ---
+    // Update category datalist
+    const updateCategoryDatalist = () => {
+      const dl = r.getElementById("category-list");
+      dl.innerHTML = this._categories.map(c => `<option value="${c}">`).join("");
+    };
+
+    // Open modal
     const openModal = (note = null) => {
       this._editingNote = note;
       r.getElementById("modal-title").textContent = note ? "Notitie bewerken" : "Nieuwe Notitie";
       r.getElementById("note-title-input").value = note?.title || "";
       r.getElementById("note-content-input").value = note?.content || "";
       r.getElementById("pin-input").checked = note?.pinned || false;
+      r.getElementById("category-input").value = note?.category || "";
+      // TIMEZONE FIX: use local time conversion
+      r.getElementById("reminder-input").value = isoToLocalInput(note?.reminder);
       r.getElementById("checklist-editor").innerHTML = "";
-      r.getElementById("reminder-input").value = note?.reminder
-        ? new Date(note.reminder).toISOString().slice(0,16) : "";
       pendingImages = note?.images ? [...note.images] : [];
-
+      updateCategoryDatalist();
       const type = note?.type || "text";
       updateTypeUI(type);
       updateColorUI(note?.color || "yellow");
-
       if (type === "checklist" && note?.checklist?.length) {
         note.checklist.forEach(item => addChecklistRow(item.text, item.checked));
       }
@@ -398,7 +437,6 @@ class NotesManagerCard extends HTMLElement {
       setTimeout(() => r.getElementById("note-title-input").focus(), 50);
     };
 
-    // --- Buttons ---
     r.getElementById("add-btn").addEventListener("click", () => openModal());
     r.getElementById("type-text-btn").addEventListener("click", () => updateTypeUI("text"));
     r.getElementById("type-check-btn").addEventListener("click", () => updateTypeUI("checklist"));
@@ -407,7 +445,6 @@ class NotesManagerCard extends HTMLElement {
       if (opt) updateColorUI(opt.dataset.color);
     });
     r.getElementById("add-checklist-item").addEventListener("click", () => addChecklistRow());
-
     r.getElementById("image-upload-area").addEventListener("click", () => r.getElementById("image-file-input").click());
     r.getElementById("image-upload-area").addEventListener("dragover", e => e.preventDefault());
     r.getElementById("image-upload-area").addEventListener("drop", e => {
@@ -418,19 +455,13 @@ class NotesManagerCard extends HTMLElement {
       [...e.target.files].forEach(f => this._readImageFile(f, pendingImages, renderImagePreviews));
       e.target.value = "";
     });
-
     r.getElementById("cancel-btn").addEventListener("click", () =>
       r.getElementById("note-modal").classList.remove("open")
     );
-
     r.getElementById("save-btn").addEventListener("click", async () => {
       const title = r.getElementById("note-title-input").value.trim();
-      if (!title) {
-        r.getElementById("note-title-input").style.borderColor = "red";
-        return;
-      }
+      if (!title) { r.getElementById("note-title-input").style.borderColor = "red"; return; }
       r.getElementById("note-title-input").style.borderColor = "";
-
       let checklist = [];
       if (selectedType === "checklist") {
         r.getElementById("checklist-editor").querySelectorAll(".checklist-row").forEach(row => {
@@ -439,7 +470,6 @@ class NotesManagerCard extends HTMLElement {
           if (text) checklist.push({ text, checked });
         });
       }
-
       const reminderVal = r.getElementById("reminder-input").value;
       const noteData = {
         title,
@@ -449,38 +479,27 @@ class NotesManagerCard extends HTMLElement {
         checklist,
         images: [...pendingImages],
         pinned: r.getElementById("pin-input").checked,
-        reminder: reminderVal ? new Date(reminderVal).toISOString() : null,
+        category: r.getElementById("category-input").value.trim(),
+        reminder: localInputToIso(reminderVal),
       };
-
       r.getElementById("note-modal").classList.remove("open");
       await this._saveNote(noteData, this._editingNote?.id || null);
     });
-
     r.getElementById("confirm-cancel").addEventListener("click", () => {
       r.getElementById("confirm-modal").classList.remove("open");
       pendingDeleteId = null;
     });
     r.getElementById("confirm-delete").addEventListener("click", async () => {
-      if (pendingDeleteId) {
-        await this._deleteNote(pendingDeleteId);
-        pendingDeleteId = null;
-      }
+      if (pendingDeleteId) { await this._deleteNote(pendingDeleteId); pendingDeleteId = null; }
       r.getElementById("confirm-modal").classList.remove("open");
     });
-
     r.getElementById("lightbox").addEventListener("click", () =>
       r.getElementById("lightbox").classList.remove("open")
     );
 
     this._openModal = openModal;
-    this._triggerDelete = (id) => {
-      pendingDeleteId = id;
-      r.getElementById("confirm-modal").classList.add("open");
-    };
-    this._openLightbox = (src) => {
-      r.getElementById("lightbox-img").src = src;
-      r.getElementById("lightbox").classList.add("open");
-    };
+    this._triggerDelete = (id) => { pendingDeleteId = id; r.getElementById("confirm-modal").classList.add("open"); };
+    this._openLightbox = (src) => { r.getElementById("lightbox-img").src = src; r.getElementById("lightbox").classList.add("open"); };
     this._toggleChecklistItem = async (noteId, itemIndex, checked) => {
       const note = this._notes.find(n => n.id === noteId);
       if (!note) return;
@@ -488,9 +507,7 @@ class NotesManagerCard extends HTMLElement {
       if (checklist[itemIndex]) checklist[itemIndex] = { ...checklist[itemIndex], checked };
       await this._saveNote({ checklist }, noteId);
     };
-    this._togglePin = async (note) => {
-      await this._saveNote({ pinned: !note.pinned }, note.id);
-    };
+    this._togglePin = async (note) => { await this._saveNote({ pinned: !note.pinned }, note.id); };
   }
 
   _readImageFile(file, pendingImages, callback) {
@@ -521,21 +538,26 @@ class NotesManagerCard extends HTMLElement {
 
     let notes = [...this._notes];
 
+    // Filter by category
+    if (this._activeCategory !== "all") {
+      notes = notes.filter(n => n.category === this._activeCategory);
+    }
+
     // Filter by search
     if (this._searchQuery) {
       notes = notes.filter(n =>
         n.title?.toLowerCase().includes(this._searchQuery) ||
         n.content?.toLowerCase().includes(this._searchQuery) ||
+        n.category?.toLowerCase().includes(this._searchQuery) ||
         n.checklist?.some(i => i.text?.toLowerCase().includes(this._searchQuery))
       );
     }
 
     if (!notes.length) {
-      grid.innerHTML = `<div class="empty-state"><div class="icon">${this._searchQuery ? "🔍" : "📋"}</div><p>${this._searchQuery ? "Geen notities gevonden voor '"+this._searchQuery+"'" : "Geen notities. Klik op + om te beginnen."}</p></div>`;
+      grid.innerHTML = `<div class="empty-state"><div class="icon">${this._searchQuery ? "🔍" : "📋"}</div><p>${this._searchQuery ? `Geen notities gevonden voor '${this._searchQuery}'` : "Geen notities. Klik op + om te beginnen."}</p></div>`;
       return;
     }
 
-    // Sort: pinned first, then by date
     notes.sort((a, b) => {
       if (a.pinned && !b.pinned) return -1;
       if (!a.pinned && b.pinned) return 1;
@@ -554,7 +576,6 @@ class NotesManagerCard extends HTMLElement {
       card.className = "note-card" + (note.pinned ? " pinned" : "");
       card.style.cssText = `background:${c.bg}; border-left:4px solid ${c.border};`;
 
-      // Body content
       let bodyHtml = "";
       if (note.type === "checklist" && note.checklist?.length) {
         bodyHtml = note.checklist.map((item, i) => `
@@ -566,13 +587,12 @@ class NotesManagerCard extends HTMLElement {
         bodyHtml = `<div class="note-body">${q ? this._highlight(note.content, q) : renderMarkdown(note.content)}</div>`;
       }
 
-      let imagesHtml = note.images?.length
-        ? `<div class="note-images">${note.images.map(src => `<img src="${src}" data-src="${src}" class="note-img" />`).join("")}</div>`
-        : "";
-
-      let reminderHtml = reminder
-        ? `<div class="note-reminder ${reminder.expired ? "expired" : ""}">⏰ ${reminder.str}${reminder.expired ? " (verlopen)" : ""}</div>`
-        : "";
+      const imagesHtml = note.images?.length
+        ? `<div class="note-images">${note.images.map(src => `<img src="${src}" data-src="${src}" class="note-img" />`).join("")}</div>` : "";
+      const reminderHtml = reminder
+        ? `<div class="note-reminder ${reminder.expired ? "expired" : ""}">⏰ ${reminder.str}${reminder.expired ? " (verlopen)" : ""}</div>` : "";
+      const categoryHtml = note.category
+        ? `<div class="note-category-badge">📁 ${note.category}</div>` : "";
 
       card.innerHTML = `
         <div class="note-header">
@@ -586,35 +606,21 @@ class NotesManagerCard extends HTMLElement {
             <button class="delete-btn" title="Verwijderen">🗑️</button>
           </div>
         </div>
+        ${categoryHtml}
         ${bodyHtml}
         ${imagesHtml}
         ${reminderHtml}
         <div class="note-date">${date}</div>
       `;
 
-      card.querySelector(".pin-btn").addEventListener("click", e => {
-        e.stopPropagation();
-        this._togglePin(note);
-      });
-      card.querySelector(".edit-btn").addEventListener("click", e => {
-        e.stopPropagation();
-        this._openModal(note);
-      });
-      card.querySelector(".delete-btn").addEventListener("click", e => {
-        e.stopPropagation();
-        this._triggerDelete(note.id);
-      });
+      card.querySelector(".pin-btn").addEventListener("click", e => { e.stopPropagation(); this._togglePin(note); });
+      card.querySelector(".edit-btn").addEventListener("click", e => { e.stopPropagation(); this._openModal(note); });
+      card.querySelector(".delete-btn").addEventListener("click", e => { e.stopPropagation(); this._triggerDelete(note.id); });
       card.querySelectorAll("input[type=checkbox][data-note]").forEach(cb => {
-        cb.addEventListener("change", e => {
-          e.stopPropagation();
-          this._toggleChecklistItem(cb.dataset.note, parseInt(cb.dataset.idx), cb.checked);
-        });
+        cb.addEventListener("change", e => { e.stopPropagation(); this._toggleChecklistItem(cb.dataset.note, parseInt(cb.dataset.idx), cb.checked); });
       });
       card.querySelectorAll(".note-img").forEach(img => {
-        img.addEventListener("click", e => {
-          e.stopPropagation();
-          this._openLightbox(img.dataset.src);
-        });
+        img.addEventListener("click", e => { e.stopPropagation(); this._openLightbox(img.dataset.src); });
       });
 
       grid.appendChild(card);
@@ -627,7 +633,7 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "notes-manager-card",
   name: "Notes Manager",
-  description: "Notities met zoeken, vastpinnen, herinneringen, Markdown, checklists en afbeeldingen.",
+  description: "Notities met categorieën, zoeken, vastpinnen, herinneringen, Markdown, checklists en afbeeldingen.",
   preview: true,
 });
 console.info(

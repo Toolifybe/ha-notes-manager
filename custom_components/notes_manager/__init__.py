@@ -99,7 +99,7 @@ def _copy_frontend(hass: HomeAssistant) -> None:
 def _build_note(body: dict, existing: dict | None = None) -> dict:
     now = dt_util.now().isoformat()
     if existing:
-        for field in ("title", "content", "color", "type", "checklist", "images", "pinned", "reminder"):
+        for field in ("title", "content", "color", "type", "checklist", "images", "pinned", "reminder", "category"):
             if field in body:
                 existing[field] = body[field]
         existing["updated_at"] = now
@@ -115,6 +115,7 @@ def _build_note(body: dict, existing: dict | None = None) -> dict:
             "images": body.get("images", []),
             "pinned": body.get("pinned", False),
             "reminder": body.get("reminder", None),
+            "category": body.get("category", ""),
             "created_at": now,
             "updated_at": now,
         }

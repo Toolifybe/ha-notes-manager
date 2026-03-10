@@ -3,7 +3,7 @@
 A custom Home Assistant integration to create, edit, and delete notes directly from your dashboard.
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)
+![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)
 
 ---
 
@@ -17,12 +17,13 @@ A custom Home Assistant integration to create, edit, and delete notes directly f
 - ✅ **Checklist / task notes**
 - ✅ **Image upload** with lightbox viewer
 - ✅ **Clickable links** (auto-detected)
-- ✅ **Search** through all notes (title, content, tasks)
+- ✅ **Search** through all notes (title, content, tasks, categories)
 - ✅ **Pin notes** to keep them at the top
-- ✅ **Reminders** with date & time picker
+- ✅ **Reminders** with date & time picker (timezone-aware)
+- ✅ **Categories** with filter bar
 - ✅ Notes sorted by most recently updated
 - ✅ Notes saved persistently in your HA config directory
-- ✅ Frontend JS auto-copied on every HA restart (no manual updates)
+- ✅ Frontend JS auto-copied on every HA restart
 - ✅ Configurable card title
 - ✅ Automation support via HA services
 
@@ -51,12 +52,6 @@ notes_manager:
 ```
 
 ### Step 4: Add the Lovelace card
-
-In your Lovelace dashboard:
-
-1. Go to **Settings → Dashboards**
-2. Edit your dashboard
-3. Add a **Manual card** with this config:
 
 ```yaml
 type: custom:notes-manager-card
@@ -88,12 +83,12 @@ ha-notes-manager/
 ├── README.md
 └── custom_components/
     └── notes_manager/
-        ├── __init__.py          # Main integration logic + API endpoints
-        ├── manifest.json        # Integration metadata
-        ├── services.yaml        # Service definitions
-        ├── strings.json         # UI strings
+        ├── __init__.py
+        ├── manifest.json
+        ├── services.yaml
+        ├── strings.json
         └── frontend/
-            └── notes-manager-card.js   # Lovelace custom card
+            └── notes-manager-card.js
 ```
 
 ---
@@ -102,20 +97,11 @@ ha-notes-manager/
 
 ### `notes_manager.add_note`
 
-| Field     | Type   | Required | Description            |
-|-----------|--------|----------|------------------------|
-| `title`   | string | ✅        | Title of the note      |
-| `content` | string | ❌        | Content of the note    |
-| `color`   | string | ❌        | Color (default: yellow)|
-
-**Example:**
-```yaml
-service: notes_manager.add_note
-data:
-  title: "Herinnering"
-  content: "Vergeet niet de planten water te geven!"
-  color: green
-```
+| Field     | Type   | Required | Description             |
+|-----------|--------|----------|-------------------------|
+| `title`   | string | ✅        | Title of the note       |
+| `content` | string | ❌        | Content of the note     |
+| `color`   | string | ❌        | Color (default: yellow) |
 
 ### `notes_manager.update_note`
 
@@ -136,18 +122,16 @@ data:
 
 ## 📡 API Endpoints
 
-| Method   | Endpoint                                 | Description          |
-|----------|------------------------------------------|----------------------|
-| `GET`    | `/api/notes_manager/notes`               | Get all notes        |
-| `POST`   | `/api/notes_manager/notes`               | Add a new note       |
-| `PUT`    | `/api/notes_manager/notes/{note_id}`     | Update a note        |
-| `DELETE` | `/api/notes_manager/notes/{note_id}`     | Delete a note        |
+| Method   | Endpoint                             | Description    |
+|----------|--------------------------------------|----------------|
+| `GET`    | `/api/notes_manager/notes`           | Get all notes  |
+| `POST`   | `/api/notes_manager/notes`           | Add a note     |
+| `PUT`    | `/api/notes_manager/notes/{note_id}` | Update a note  |
+| `DELETE` | `/api/notes_manager/notes/{note_id}` | Delete a note  |
 
 ---
 
 ## 📝 Markdown Support
-
-In text notes you can use:
 
 | Syntax | Result |
 |--------|--------|
@@ -176,14 +160,17 @@ Notes are stored in:
 
 ## 📋 Changelog
 
+### v2.3.0
+- 📁 Categories with filter bar
+- 🐛 Fixed reminder timezone bug (no more hour shifts)
+
 ### v2.2.0
-- 🔍 Search through all notes (title, content, tasks)
-- 📌 Pin notes to keep them at the top
+- 🔍 Search through all notes
+- 📌 Pin notes to top
 - ⏰ Reminders with date & time picker
 
 ### v2.1.x
-- 🐛 Fixed checklist input text visibility
-- 🐛 Fixed checklist layout on mobile
+- 🐛 Fixed checklist input visibility and mobile layout
 - 🔄 Auto-copy frontend JS on HA restart
 - 🏷️ Configurable card title
 
@@ -200,7 +187,6 @@ Notes are stored in:
 
 ## 🐛 Issues & Contributions
 
-Found a bug or want to contribute?
 → [Open an issue](https://github.com/YOUR_GITHUB_USERNAME/ha-notes-manager/issues)
 
 ---
