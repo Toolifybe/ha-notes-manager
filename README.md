@@ -3,7 +3,7 @@
 A custom Home Assistant integration to create, edit, and delete notes directly from your dashboard.
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-![Version](https://img.shields.io/badge/version-2.3.2-blue.svg)
+![Version](https://img.shields.io/badge/version-2.4.0-blue.svg)
 
 ---
 
@@ -15,6 +15,7 @@ A custom Home Assistant integration to create, edit, and delete notes directly f
 - ✅ Choose from 6 note colors (yellow, blue, green, pink, purple, orange)
 - ✅ **Markdown support** (bold, italic, headings, code, links)
 - ✅ **Checklist / task notes**
+- ✅ **Numbered lists**
 - ✅ **Image upload** with lightbox viewer
 - ✅ **Clickable links** (auto-detected)
 - ✅ **Search** through all notes (title, content, tasks, categories)
@@ -159,6 +160,9 @@ Notes are stored in:
 ---
 
 ## 📋 Changelog
+
+### v2.4.0
+- 🔢 Numbered list note type
 
 ### v2.3.0
 - 📁 Categories with filter bar

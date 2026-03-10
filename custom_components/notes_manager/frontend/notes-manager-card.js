@@ -3,7 +3,7 @@
  * v2.3.0 - Categories + Timezone fix
  */
 
-const CARD_VERSION = "2.3.2";
+const CARD_VERSION = "2.4.0";
 
 function renderMarkdown(text) {
   if (!text) return "";
@@ -170,6 +170,8 @@ class NotesManagerCard extends HTMLElement {
         .checklist-item { display:flex; align-items:center; gap:6px; margin:3px 0; font-size:.85em; }
         .checklist-item input[type=checkbox] { cursor:pointer; width:14px; height:14px; flex-shrink:0; }
         .checklist-item.done span { text-decoration:line-through; opacity:.55; }
+        .numbered-item { display:flex; align-items:center; gap:8px; margin:3px 0; font-size:.85em; }
+        .numbered-item .num-badge { font-size:.8em; font-weight:bold; color:rgba(0,0,0,.5); min-width:18px; text-align:right; flex-shrink:0; }
         .note-images { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
         .note-images img { width:60px; height:60px; object-fit:cover; border-radius:4px; cursor:pointer; }
         .empty-state { text-align:center; padding:32px 16px; color:var(--secondary-text-color); grid-column:1/-1; }
@@ -249,6 +251,7 @@ class NotesManagerCard extends HTMLElement {
           <div class="type-toggle">
             <button class="type-btn active" id="type-text-btn">📝 Tekst</button>
             <button class="type-btn" id="type-check-btn">✅ Checklist</button>
+            <button class="type-btn" id="type-numbered-btn">🔢 Genummerd</button>
           </div>
 
           <label class="pin-toggle">
@@ -271,6 +274,12 @@ class NotesManagerCard extends HTMLElement {
             <label>Taken</label>
             <div class="checklist-editor" id="checklist-editor"></div>
             <button class="add-item-btn" id="add-checklist-item">+ Taak toevoegen</button>
+          </div>
+
+          <div class="form-group" id="numbered-section" style="display:none">
+            <label>Genummerde lijst</label>
+            <div class="checklist-editor" id="numbered-editor"></div>
+            <button class="add-item-btn" id="add-numbered-item">+ Item toevoegen</button>
           </div>
 
           <div class="form-group">
@@ -373,8 +382,10 @@ class NotesManagerCard extends HTMLElement {
       selectedType = type;
       r.getElementById("type-text-btn").classList.toggle("active", type === "text");
       r.getElementById("type-check-btn").classList.toggle("active", type === "checklist");
+      r.getElementById("type-numbered-btn").classList.toggle("active", type === "numbered");
       r.getElementById("text-section").style.display = type === "text" ? "" : "none";
       r.getElementById("checklist-section").style.display = type === "checklist" ? "" : "none";
+      r.getElementById("numbered-section").style.display = type === "numbered" ? "" : "none";
     };
 
     // Checklist row
@@ -392,6 +403,28 @@ class NotesManagerCard extends HTMLElement {
       btn.addEventListener("click", () => row.remove());
       row.appendChild(cb); row.appendChild(inp); row.appendChild(btn);
       editor.appendChild(row);
+      inp.focus();
+    };
+
+    // Numbered list row
+    const addNumberedRow = (text = "") => {
+      const editor = r.getElementById("numbered-editor");
+      const updateNumbers = () => {
+        editor.querySelectorAll(".num-badge").forEach((badge, i) => { badge.textContent = (i+1) + "."; });
+      };
+      const row = document.createElement("div");
+      row.className = "checklist-row";
+      const numBadge = document.createElement("span");
+      numBadge.className = "num-badge";
+      const inp = document.createElement("input");
+      inp.type = "text"; inp.placeholder = "Item omschrijving..."; inp.value = text;
+      inp.style.cssText = "flex:1;min-width:0;padding:8px 10px;border:1px solid #aaa;border-radius:5px;font-size:.9em;background:#fff;color:#000;box-sizing:border-box;font-family:inherit;";
+      const btn = document.createElement("button");
+      btn.title = "Verwijder"; btn.textContent = "🗑️";
+      btn.addEventListener("click", () => { row.remove(); updateNumbers(); });
+      row.appendChild(numBadge); row.appendChild(inp); row.appendChild(btn);
+      editor.appendChild(row);
+      updateNumbers();
       inp.focus();
     };
 
@@ -443,6 +476,7 @@ class NotesManagerCard extends HTMLElement {
       // TIMEZONE FIX: use local time conversion
       r.getElementById("reminder-input").value = isoToLocalInput(note?.reminder);
       r.getElementById("checklist-editor").innerHTML = "";
+      r.getElementById("numbered-editor").innerHTML = "";
       pendingImages = note?.images ? [...note.images] : [];
       updateCategorySelect(note?.category || "");
       const type = note?.type || "text";
@@ -450,6 +484,9 @@ class NotesManagerCard extends HTMLElement {
       updateColorUI(note?.color || "yellow");
       if (type === "checklist" && note?.checklist?.length) {
         note.checklist.forEach(item => addChecklistRow(item.text, item.checked));
+      }
+      if (type === "numbered" && note?.checklist?.length) {
+        note.checklist.forEach(item => addNumberedRow(item.text));
       }
       renderImagePreviews();
       r.getElementById("note-modal").classList.add("open");
@@ -459,11 +496,13 @@ class NotesManagerCard extends HTMLElement {
     r.getElementById("add-btn").addEventListener("click", () => openModal());
     r.getElementById("type-text-btn").addEventListener("click", () => updateTypeUI("text"));
     r.getElementById("type-check-btn").addEventListener("click", () => updateTypeUI("checklist"));
+    r.getElementById("type-numbered-btn").addEventListener("click", () => updateTypeUI("numbered"));
     r.getElementById("color-picker").addEventListener("click", e => {
       const opt = e.target.closest(".color-option");
       if (opt) updateColorUI(opt.dataset.color);
     });
     r.getElementById("add-checklist-item").addEventListener("click", () => addChecklistRow());
+    r.getElementById("add-numbered-item").addEventListener("click", () => addNumberedRow());
     r.getElementById("image-upload-area").addEventListener("click", () => r.getElementById("image-file-input").click());
     r.getElementById("image-upload-area").addEventListener("dragover", e => e.preventDefault());
     r.getElementById("image-upload-area").addEventListener("drop", e => {
@@ -487,6 +526,11 @@ class NotesManagerCard extends HTMLElement {
           const text = row.querySelector("input[type=text]").value.trim();
           const checked = row.querySelector("input[type=checkbox]").checked;
           if (text) checklist.push({ text, checked });
+        });
+      } else if (selectedType === "numbered") {
+        r.getElementById("numbered-editor").querySelectorAll(".checklist-row").forEach(row => {
+          const text = row.querySelector("input[type=text]").value.trim();
+          if (text) checklist.push({ text, checked: false });
         });
       }
       const reminderVal = r.getElementById("reminder-input").value;
@@ -572,7 +616,8 @@ class NotesManagerCard extends HTMLElement {
         n.title?.toLowerCase().includes(this._searchQuery) ||
         n.content?.toLowerCase().includes(this._searchQuery) ||
         n.category?.toLowerCase().includes(this._searchQuery) ||
-        n.checklist?.some(i => i.text?.toLowerCase().includes(this._searchQuery))
+        n.checklist?.some(i => i.text?.toLowerCase().includes(this._searchQuery)) ||
+        (n.type === "numbered" && n.checklist?.some(i => i.text?.toLowerCase().includes(this._searchQuery)))
       );
     }
 
@@ -604,6 +649,12 @@ class NotesManagerCard extends HTMLElement {
         bodyHtml = note.checklist.map((item, i) => `
           <div class="checklist-item ${item.checked ? "done" : ""}">
             <input type="checkbox" ${item.checked ? "checked" : ""} data-note="${note.id}" data-idx="${i}" />
+            <span>${this._highlight(item.text, q)}</span>
+          </div>`).join("");
+      } else if (note.type === "numbered" && note.checklist?.length) {
+        bodyHtml = note.checklist.map((item, i) => `
+          <div class="numbered-item">
+            <span class="num-badge">${i+1}.</span>
             <span>${this._highlight(item.text, q)}</span>
           </div>`).join("");
       } else if (note.content) {
@@ -656,7 +707,7 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "notes-manager-card",
   name: "Notes Manager",
-  description: "Notities met categorieën, zoeken, vastpinnen, herinneringen, Markdown, checklists en afbeeldingen.",
+  description: "Notities met categorieën, zoeken, vastpinnen, herinneringen, Markdown, checklists, genummerde lijsten en afbeeldingen.",
   preview: true,
 });
 console.info(
