@@ -3,7 +3,7 @@
 A custom Home Assistant integration to create, edit, and delete notes directly from your dashboard.
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-![Version](https://img.shields.io/badge/version-2.6.0-blue.svg)
+![Version](https://img.shields.io/badge/version-2.7.0-blue.svg)
 
 ---
 
@@ -27,6 +27,7 @@ A custom Home Assistant integration to create, edit, and delete notes directly f
 - ✅ Frontend JS auto-copied on every HA restart
 - ✅ Configurable card title
 - ✅ **Duplicate notes**
+- ✅ **Priority levels** (high 🔴 / normal 🟡 / low 🟢) with visual badge and smart sorting
 - ✅ **Fully customizable labels** (multilingual support)
 - ✅ Automation support via HA services
 
@@ -111,6 +112,11 @@ labels:
   pin_yes: "Unpin"
   pin_no: "Pin"
   reminder_expired: "(expired)"
+  field_priority: "Priority"
+  priority_none: "— No priority —"
+  priority_low: "🟢 Low"
+  priority_medium: "🟡 Normal"
+  priority_high: "🔴 High"
 ```
 
 > 💡 All labels are optional — any label you omit will fall back to the Dutch default.
@@ -193,6 +199,21 @@ ha-notes-manager/
 
 ---
 
+## 🔴 Priority Levels
+
+Each note can have an optional priority. Notes are automatically sorted by priority (within the same pinned/unpinned group):
+
+| Value | Label | Color |
+|-------|-------|-------|
+| `high` | 🔴 Hoog | Red badge |
+| `medium` | 🟡 Normaal | Yellow badge |
+| `low` | 🟢 Laag | Green badge |
+| *(empty)* | — | No badge |
+
+Sort order: **pinned** → **high** → **medium** → **low** → **none** → most recently updated.
+
+---
+
 ## 💾 Data Storage
 
 Notes are stored in:
@@ -203,6 +224,12 @@ Notes are stored in:
 ---
 
 ## 📋 Changelog
+
+### v2.7.0
+- 🔴 Priority levels per note (high / normal / low)
+- 🏷️ Visual priority badge on each note card
+- 📊 Smart sorting: pinned → priority → most recently updated
+- 🌍 Priority labels fully customizable (multilingual support)
 
 ### v2.6.0
 - 📋 Duplicate notes (copy icon on each note card)

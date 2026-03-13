@@ -3,7 +3,7 @@
  * v2.3.0 - Categories + Timezone fix
  */
 
-const CARD_VERSION = "2.6.0";
+const CARD_VERSION = "2.7.0";
 
 function renderMarkdown(text) {
   if (!text) return "";
@@ -64,6 +64,8 @@ class NotesManagerCard extends HTMLElement {
       title_placeholder: "Voer een titel in...", image_upload: "📷 Klik of sleep een afbeelding hier",
       pin_yes: "Losmaken", pin_no: "Vastpinnen", reminder_expired: "(verlopen)",
       btn_edit: "Bewerken", btn_duplicate: "Dupliceren", duplicate_prefix: "Kopie van",
+      field_priority: "Prioriteit", priority_none: "— Geen prioriteit —",
+      priority_low: "🟢 Laag", priority_medium: "🟡 Normaal", priority_high: "🔴 Hoog",
     };
   }
 
@@ -121,6 +123,11 @@ class NotesManagerCard extends HTMLElement {
       btn_edit:           l.btn_edit            || "Bewerken",
       btn_duplicate:      l.btn_duplicate       || "Dupliceren",
       duplicate_prefix:   l.duplicate_prefix    || "Kopie van",
+      field_priority:     l.field_priority      || "Prioriteit",
+      priority_none:      l.priority_none       || "— Geen prioriteit —",
+      priority_low:       l.priority_low        || "🟢 Laag",
+      priority_medium:    l.priority_medium     || "🟡 Normaal",
+      priority_high:      l.priority_high       || "🔴 Hoog",
     };
   }
   getCardSize() { return 4; }
@@ -285,6 +292,11 @@ class NotesManagerCard extends HTMLElement {
         .lightbox.open { display:flex; }
         .lightbox img { max-width:90vw; max-height:90vh; border-radius:8px; box-shadow:0 4px 32px rgba(0,0,0,.5); }
         mark { background:#fff176; border-radius:2px; padding:0 1px; }
+        .priority-badge { display:inline-flex; align-items:center; gap:3px; font-size:.68em; font-weight:600; border-radius:10px; padding:1px 8px; margin-bottom:5px; }
+        .priority-badge.high   { background:#ffebee; color:#c62828; border:1px solid #ef9a9a; }
+        .priority-badge.medium { background:#fffde7; color:#f57f17; border:1px solid #ffe082; }
+        .priority-badge.low    { background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7; }
+        .priority-select { width:100%; padding:8px 10px; border:1px solid var(--divider-color,#e0e0e0); border-radius:6px; font-size:.95em; background:var(--input-fill-color,#f5f5f5); color:var(--primary-text-color); box-sizing:border-box; font-family:inherit; }
       </style>
 
       <ha-card>
@@ -353,6 +365,16 @@ class NotesManagerCard extends HTMLElement {
             <div id="category-new-wrap" style="margin-top:6px;display:none;">
               <input type="text" id="category-new-input" placeholder="${this._l.category_placeholder}" />
             </div>
+          </div>
+
+          <div class="form-group">
+            <label>${this._l.field_priority}</label>
+            <select class="priority-select" id="priority-select">
+              <option value="">${this._l.priority_none}</option>
+              <option value="low">${this._l.priority_low}</option>
+              <option value="medium">${this._l.priority_medium}</option>
+              <option value="high">${this._l.priority_high}</option>
+            </select>
           </div>
 
           <div class="form-group">
@@ -535,6 +557,7 @@ class NotesManagerCard extends HTMLElement {
       r.getElementById("note-title-input").value = note?.title || "";
       r.getElementById("note-content-input").value = note?.content || "";
       r.getElementById("pin-input").checked = note?.pinned || false;
+      r.getElementById("priority-select").value = note?.priority || "";
       // TIMEZONE FIX: use local time conversion
       r.getElementById("reminder-input").value = isoToLocalInput(note?.reminder);
       r.getElementById("checklist-editor").innerHTML = "";
@@ -604,6 +627,7 @@ class NotesManagerCard extends HTMLElement {
         checklist,
         images: [...pendingImages],
         pinned: r.getElementById("pin-input").checked,
+        priority: r.getElementById("priority-select").value,
         category: (() => {
           const sel = r.getElementById("category-select").value;
           if (sel === "__new__") return r.getElementById("category-new-input").value.trim();
@@ -650,6 +674,7 @@ class NotesManagerCard extends HTMLElement {
       pinned: false,
       category: note.category || "",
       reminder: null,
+      priority: note.priority || "",
     };
     await this._saveNote(dupeData);
   }
@@ -706,6 +731,10 @@ class NotesManagerCard extends HTMLElement {
     notes.sort((a, b) => {
       if (a.pinned && !b.pinned) return -1;
       if (!a.pinned && b.pinned) return 1;
+      const pOrder = { high: 0, medium: 1, low: 2, "": 3 };
+      const pa = pOrder[a.priority || ""] ?? 3;
+      const pb = pOrder[b.priority || ""] ?? 3;
+      if (pa !== pb) return pa - pb;
       return new Date(b.updated_at) - new Date(a.updated_at);
     });
 
@@ -744,6 +773,9 @@ class NotesManagerCard extends HTMLElement {
         ? `<div class="note-reminder ${reminder.expired ? "expired" : ""}">⏰ ${reminder.str}${reminder.expired ? " " + this._l.reminder_expired : ""}</div>` : "";
       const categoryHtml = note.category
         ? `<div class="note-category-badge">📁 ${note.category}</div>` : "";
+      const priorityLabels = { high: this._l.priority_high, medium: this._l.priority_medium, low: this._l.priority_low };
+      const priorityHtml = note.priority
+        ? `<div class="priority-badge ${note.priority}">${priorityLabels[note.priority] || ""}</div>` : "";
 
       card.innerHTML = `
         <div class="note-header">
@@ -758,6 +790,7 @@ class NotesManagerCard extends HTMLElement {
             <button class="delete-btn" title="${this._l.btn_delete}">🗑️</button>
           </div>
         </div>
+        ${priorityHtml}
         ${categoryHtml}
         ${bodyHtml}
         ${imagesHtml}
