@@ -1,7 +1,7 @@
 {
   "domain": "notes_manager",
   "name": "Notes Manager",
-  "version": "2.6.0",
+  "version": "2.7.1",
   "documentation": "https://github.com/toolifybe/ha-notes-manager",
   "issue_tracker": "https://github.com/toolifybe/ha-notes-manager/issues",
   "codeowners": ["@toolifybe"],
