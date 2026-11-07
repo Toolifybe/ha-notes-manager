@@ -3,7 +3,7 @@
 A custom Home Assistant integration to create, edit, and delete notes directly from your dashboard.
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-![Version](https://img.shields.io/badge/version-2.7.1-blue.svg)
+![Version](https://img.shields.io/badge/version-2.7.2-blue.svg)
 
 ---
 
@@ -20,10 +20,12 @@ A custom Home Assistant integration to create, edit, and delete notes directly f
 - ✅ **Clickable links** (auto-detected)
 - ✅ **Search** through all notes (title, content, tasks, categories)
 - ✅ **Pin notes** to keep them at the top
-- ✅ **Reminders** with date & time picker (timezone-aware)
+- ✅ **Reminders** with date & time: a Home Assistant notification + event `notes_manager_reminder` at that moment
 - ✅ **Categories** with filter bar
-- ✅ Notes sorted by most recently updated
-- ✅ Notes saved persistently in your HA config directory
+- ✅ Notes sorted by most recently edited (ticking off or pinning does not move a note)
+- ✅ Notes saved safely in your HA config directory (with `.bak` backup)
+- ✅ **Live on every device**, also for non-admin users
+- ✅ Tap a note to edit it (works on phones and tablets)
 - ✅ Frontend JS auto-copied on every HA restart
 - ✅ Configurable card title
 - ✅ **Duplicate notes**
@@ -39,7 +41,7 @@ A custom Home Assistant integration to create, edit, and delete notes directly f
 
 1. Open **HACS** in Home Assistant
 2. Click **Integrations** → **⋮ (three dots)** → **Custom repositories**
-3. Add the URL: `https://github.com/YOUR_GITHUB_USERNAME/ha-notes-manager`
+3. Add the URL: `https://github.com/Toolifybe/ha-notes-manager`
 4. Category: **Integration**
 5. Click **Add**
 
@@ -129,6 +131,7 @@ labels:
 
 ```
 ha-notes-manager/
+├── .github/workflows/release.yml   ← GitHub release per tag (HACS updates)
 ├── hacs.json
 ├── README.md
 └── custom_components/
@@ -167,6 +170,32 @@ ha-notes-manager/
 | Field      | Type   | Required | Description                  |
 |------------|--------|----------|------------------------------|
 | `note_id`  | string | ✅        | The ID of the note to delete |
+
+---
+
+## ⏰ Reminders
+
+When a reminder is due, the integration:
+
+- shows a **Home Assistant notification** (bell icon) with the note's title and content;
+- fires the event **`notes_manager_reminder`** with `note_id`, `title`, `content`, `reminder` and `category`.
+
+A reminder is sent once. If HA was off at that moment, it is sent after the restart
+(if it is less than 12 hours late). Changing the time sends it again.
+
+Send it to your phone with an automation:
+
+```yaml
+alias: Notes reminder to phone
+triggers:
+  - trigger: event
+    event_type: notes_manager_reminder
+actions:
+  - action: notify.mobile_app_your_phone
+    data:
+      title: "⏰ {{ trigger.event.data.title }}"
+      message: "{{ trigger.event.data.content or 'Reminder' }}"
+```
 
 ---
 
@@ -221,9 +250,32 @@ Notes are stored in:
 <HA config directory>/notes_manager_data.json
 ```
 
+The file is written safely (temporary file first) and the previous version is kept as
+`notes_manager_data.json.bak`. If the file is ever damaged, it is copied to
+`*.corrupt-<date>`, the `.bak` is used, and nothing gets overwritten. If saving fails,
+the card shows a message and keeps your edit open.
+
+Live updates use the websocket command `notes_manager/subscribe` (works for all users).
+
 ---
 
 ## 📋 Changelog
+
+### v2.7.2
+- 🛡️ A damaged notes file is never treated as empty anymore (could wipe all notes); safe writes with `.bak` backup
+- 🛡️ A failed save is shown in the card and the editor stays open (it used to look saved)
+- ⚡ Files are read and written outside HA's event loop, one change at a time (no more "blocking call" warning)
+- 📱 Edit, pin, duplicate and delete buttons are visible on phones and tablets; tap a note to edit it
+- 🐛 Switching between text, checklist and numbered list keeps your items
+- 🔄 Live updates also work for non-admin users, and without downloading all notes again
+- ⏰ Reminders now really remind: HA notification + `notes_manager_reminder` event
+- 🐛 Ticking off or pinning no longer changes the date or moves the note
+- 🔍 Search highlights inside formatted text and no longer breaks on "amp" or "lt"; photos are shrunk on upload
+- 🛡️ Links, categories, priorities and images are escaped (no code via a note)
+- 🔖 GitHub release per tag, so HACS shows updates in Settings → Updates
+
+### v2.7.1
+- 🐛 Priority not saved or displayed
 
 ### v2.7.0
 - 🔴 Priority levels per note (high / normal / low)
@@ -267,7 +319,7 @@ Notes are stored in:
 
 ## 🐛 Issues & Contributions
 
-→ [Open an issue](https://github.com/YOUR_GITHUB_USERNAME/ha-notes-manager/issues)
+→ [Open an issue](https://github.com/Toolifybe/ha-notes-manager/issues)
 
 ---
 

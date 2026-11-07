@@ -1,12 +1,18 @@
 {
   "domain": "notes_manager",
   "name": "Notes Manager",
-  "version": "2.7.1",
-  "documentation": "https://github.com/toolifybe/ha-notes-manager",
-  "issue_tracker": "https://github.com/toolifybe/ha-notes-manager/issues",
-  "codeowners": ["@toolifybe"],
+  "version": "2.7.2",
+  "documentation": "https://github.com/Toolifybe/ha-notes-manager",
+  "issue_tracker": "https://github.com/Toolifybe/ha-notes-manager/issues",
+  "codeowners": [
+    "@toolifybe"
+  ],
   "requirements": [],
-  "dependencies": [],
+  "dependencies": [
+    "http",
+    "websocket_api",
+    "persistent_notification"
+  ],
   "config_flow": false,
   "iot_class": "local_push",
   "integration_type": "hub"

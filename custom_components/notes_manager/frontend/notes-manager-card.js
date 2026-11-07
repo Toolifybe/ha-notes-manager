@@ -1,14 +1,50 @@
 /**
  * Notes Manager Card for Home Assistant
- * v2.3.0 - Categories + Timezone fix
+ * v2.7.2
  */
 
-const CARD_VERSION = "2.7.0";
+const CARD_VERSION = "2.7.2";
 
+// Everything from notes goes through esc() before it lands in innerHTML.
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, c => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
+// Images: uploaded photos (data:image), web links or local paths only
+function safeImg(url) {
+  const u = String(url ?? "").trim();
+  return /^(data:image\/|https?:\/\/|\/(?!\/))/i.test(u) ? u : "";
+}
+
+// Photos are stored inside the notes file: keep them small (max 1280 px, JPEG)
+function shrinkImage(file, max = 1280, quality = 0.82) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        if (scale === 1 && file.size < 300000) { resolve(reader.result); return; }
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width * scale);
+        c.height = Math.round(img.height * scale);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = () => resolve(reader.result);
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// Markdown → HTML. The text is escaped first (also quotes), links only http(s).
 function renderMarkdown(text) {
   if (!text) return "";
-  return text
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  const link = (url, label) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+  return esc(text)
     .replace(/^### (.+)$/gm, "<h3>$1</h3>")
     .replace(/^## (.+)$/gm, "<h2>$1</h2>")
     .replace(/^# (.+)$/gm, "<h1>$1</h1>")
@@ -16,9 +52,37 @@ function renderMarkdown(text) {
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
     .replace(/`(.+?)`/g, "<code>$1</code>")
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-    .replace(/(^|[\s])((https?:\/\/)[^\s<]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, label, url) => link(url, label))
+    .replace(/(^|\s)(https?:\/\/[^\s<]+)/g, (m, pre, url) => pre + link(url, url))
     .replace(/\n/g, "<br>");
+}
+
+// Highlight a search term in the TEXT of an element (not in its HTML),
+// so markup and entities never break and Markdown stays formatted.
+function markText(root, query) {
+  if (!query) return;
+  const q = query.toLowerCase();
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach(node => {
+    const text = node.nodeValue;
+    const lower = text.toLowerCase();
+    let i = lower.indexOf(q);
+    if (i < 0 || node.parentElement?.closest("mark")) return;
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    while (i >= 0) {
+      frag.appendChild(document.createTextNode(text.slice(last, i)));
+      const m = document.createElement("mark");
+      m.textContent = text.slice(i, i + q.length);
+      frag.appendChild(m);
+      last = i + q.length;
+      i = lower.indexOf(q, last);
+    }
+    frag.appendChild(document.createTextNode(text.slice(last)));
+    node.parentNode.replaceChild(frag, node);
+  });
 }
 
 // Fix: convert ISO string to local datetime-local input value (no timezone shift)
@@ -75,8 +139,70 @@ class NotesManagerCard extends HTMLElement {
       this._initialized = true;
       this._render();
       this._fetchNotes();
-      hass.connection.subscribeEvents(() => this._fetchNotes(), "notes_manager_updated");
     }
+    if (this.isConnected) this._subscribe();
+  }
+
+  connectedCallback() {
+    if (this._hass) this._subscribe();
+    this._onVisible = () => { if (document.visibilityState === "visible" && this._hass) this._fetchNotes(); };
+    document.addEventListener("visibilitychange", this._onVisible);
+  }
+
+  disconnectedCallback() {
+    if (this._unsub) { try { this._unsub(); } catch (e) {} }
+    this._unsub = null;
+    document.removeEventListener("visibilitychange", this._onVisible);
+  }
+
+  // notes_manager/subscribe works for every user; subscribeEvents on a custom
+  // event only for admins (fallback for an older integration)
+  _subscribe() {
+    if (this._unsub || this._subscribing) return;
+    this._subscribing = true;
+    const conn = this._hass.connection;
+    const onEvent = data => this._applyChange(data || {});
+    conn.subscribeMessage(onEvent, { type: "notes_manager/subscribe" })
+      .catch(() => conn.subscribeEvents(ev => onEvent(ev.data), "notes_manager_updated"))
+      .then(unsub => {
+        this._subscribing = false;
+        if (!this.isConnected) { unsub(); return; }
+        this._unsub = unsub;
+      })
+      .catch(e => { this._subscribing = false; console.warn("Notes: no live updates", e); });
+  }
+
+  // Apply a change locally instead of downloading all notes (and photos) again
+  _applyChange(data) {
+    if (data.action === "delete" && data.note_id) {
+      this._notes = this._notes.filter(n => n.id !== data.note_id);
+    } else if (data.note?.id) {
+      const i = this._notes.findIndex(n => n.id === data.note.id);
+      if (i >= 0) this._notes[i] = data.note; else this._notes.push(data.note);
+    } else {
+      this._fetchNotes();
+      return;
+    }
+    this._updateCategories();
+    this._renderCategoryFilter();
+    this._renderNotes();
+  }
+
+  _updateCategories() {
+    const cats = new Set();
+    this._notes.forEach(n => { if (n.category) cats.add(n.category); });
+    this._categories = [...cats].sort((a, b) => a.localeCompare(b, "nl"));
+  }
+
+  _showError(e) {
+    const el = this.shadowRoot?.getElementById("nm-error");
+    console.error("Notes:", e);
+    if (!el) return;
+    const detail = e?.body?.error || e?.body?.message || e?.message || "";
+    el.textContent = "Opslaan of laden mislukt" + (detail ? ": " + detail : "") + ". Je wijziging is niet bewaard.";
+    el.classList.add("show");
+    clearTimeout(this._errTimer);
+    this._errTimer = setTimeout(() => el.classList.remove("show"), 10000);
   }
 
   setConfig(config) {
@@ -136,31 +262,32 @@ class NotesManagerCard extends HTMLElement {
   async _fetchNotes() {
     try {
       this._notes = await this._hass.callApi("GET", "notes_manager/notes");
-      // Collect unique categories from notes
-      const cats = new Set();
-      this._notes.forEach(n => { if (n.category) cats.add(n.category); });
-      this._categories = [...cats].sort();
+      this._updateCategories();
       this._renderCategoryFilter();
       this._renderNotes();
-    } catch (e) { console.error("Notes fetch error:", e); }
+    } catch (e) { this._showError(e); }
   }
 
+  // Returns true when the server really saved it
   async _saveNote(noteData, id = null) {
     try {
-      if (id) {
-        await this._hass.callApi("PUT", `notes_manager/notes/${id}`, noteData);
-      } else {
-        await this._hass.callApi("POST", "notes_manager/notes", noteData);
-      }
-      await this._fetchNotes();
-    } catch (e) { console.error("Save error:", e); }
+      const note = id
+        ? await this._hass.callApi("PUT", `notes_manager/notes/${encodeURIComponent(id)}`, noteData)
+        : await this._hass.callApi("POST", "notes_manager/notes", noteData);
+      this._applyChange({ action: id ? "update" : "add", note });
+      return true;
+    } catch (e) {
+      this._showError(e);
+      this._fetchNotes();
+      return false;
+    }
   }
 
   async _deleteNote(id) {
     try {
-      await this._hass.callApi("DELETE", `notes_manager/notes/${id}`);
-      await this._fetchNotes();
-    } catch (e) { console.error("Delete error:", e); }
+      await this._hass.callApi("DELETE", `notes_manager/notes/${encodeURIComponent(id)}`);
+      this._applyChange({ action: "delete", note_id: id });
+    } catch (e) { this._showError(e); }
   }
 
   _colorStyle(color) {
@@ -224,7 +351,11 @@ class NotesManagerCard extends HTMLElement {
         .pin-badge { font-size:12px; flex-shrink:0; margin-top:1px; }
         .note-title { font-weight:bold; font-size:.95em; word-break:break-word; }
         .note-actions { display:flex; gap:2px; margin-left:6px; opacity:0; transition:opacity .2s; flex-shrink:0; }
-        .note-card:hover .note-actions { opacity:1; }
+        .note-card:hover .note-actions, .note-card:focus-within .note-actions { opacity:1; }
+        @media (hover: none) { .note-actions { opacity:1; } }
+        .note-card { cursor:pointer; }
+        .nm-error { display:none; margin:0 0 10px; padding:8px 12px; border-radius:8px; background:#ffebee; color:#c62828; font-size:.85em; }
+        .nm-error.show { display:block; }
         .note-actions button { background:none; border:none; cursor:pointer; padding:2px 4px; border-radius:4px; font-size:13px; }
         .note-actions button:hover { background:rgba(0,0,0,.1); }
         .note-category-badge { display:inline-block; font-size:.7em; background:rgba(0,0,0,.1); border-radius:10px; padding:1px 8px; margin-bottom:5px; color:rgba(0,0,0,.6); }
@@ -301,11 +432,12 @@ class NotesManagerCard extends HTMLElement {
 
       <ha-card>
         <div class="card-header">
-          <span class="card-title">${this._title}</span>
+          <span class="card-title">${esc(this._title)}</span>
           <div class="header-actions">
             <button class="add-btn" id="add-btn" title="Nieuwe notitie">+</button>
           </div>
         </div>
+        <div class="nm-error" id="nm-error"></div>
         <div class="search-bar">
           <span>🔍</span>
           <input type="text" id="search-input" placeholder="${this._l.search_placeholder}" />
@@ -462,6 +594,36 @@ class NotesManagerCard extends HTMLElement {
     };
 
     // Type toggle
+    // Items currently in the editor of a type, as [{text, checked}]
+    const collectItems = (type) => {
+      if (type === "text") {
+        return r.getElementById("note-content-input").value.split("\n")
+          .map(l => l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, "").trim()).filter(Boolean)
+          .map(text => ({ text, checked: false }));
+      }
+      const editor = r.getElementById(type === "checklist" ? "checklist-editor" : "numbered-editor");
+      return [...editor.querySelectorAll(".checklist-row")].map(row => ({
+        text: row.querySelector("input[type=text]").value.trim(),
+        checked: !!row.querySelector("input[type=checkbox]")?.checked,
+      })).filter(i => i.text);
+    };
+
+    // Switching type in the editor carries the content over instead of losing it
+    const switchType = (type) => {
+      if (type === selectedType) return;
+      const items = collectItems(selectedType);
+      if (type === "text") {
+        const ta = r.getElementById("note-content-input");
+        if (!ta.value.trim() && items.length) ta.value = items.map(i => "- " + i.text).join("\n");
+      } else {
+        const editor = r.getElementById(type === "checklist" ? "checklist-editor" : "numbered-editor");
+        if (!editor.querySelector(".checklist-row")) {
+          items.forEach(i => type === "checklist" ? addChecklistRow(i.text, i.checked, false) : addNumberedRow(i.text, false));
+        }
+      }
+      updateTypeUI(type);
+    };
+
     const updateTypeUI = (type) => {
       selectedType = type;
       r.getElementById("type-text-btn").classList.toggle("active", type === "text");
@@ -473,7 +635,7 @@ class NotesManagerCard extends HTMLElement {
     };
 
     // Checklist row
-    const addChecklistRow = (text = "", checked = false) => {
+    const addChecklistRow = (text = "", checked = false, focus = true) => {
       const editor = r.getElementById("checklist-editor");
       const row = document.createElement("div");
       row.className = "checklist-row";
@@ -487,11 +649,11 @@ class NotesManagerCard extends HTMLElement {
       btn.addEventListener("click", () => row.remove());
       row.appendChild(cb); row.appendChild(inp); row.appendChild(btn);
       editor.appendChild(row);
-      inp.focus();
+      if (focus) inp.focus();
     };
 
     // Numbered list row
-    const addNumberedRow = (text = "") => {
+    const addNumberedRow = (text = "", focus = true) => {
       const editor = r.getElementById("numbered-editor");
       const updateNumbers = () => {
         editor.querySelectorAll(".num-badge").forEach((badge, i) => { badge.textContent = (i+1) + "."; });
@@ -509,7 +671,7 @@ class NotesManagerCard extends HTMLElement {
       row.appendChild(numBadge); row.appendChild(inp); row.appendChild(btn);
       editor.appendChild(row);
       updateNumbers();
-      inp.focus();
+      if (focus) inp.focus();
     };
 
     // Image previews
@@ -519,7 +681,7 @@ class NotesManagerCard extends HTMLElement {
       pendingImages.forEach((src, i) => {
         const wrap = document.createElement("div");
         wrap.className = "image-preview-wrap";
-        wrap.innerHTML = `<img src="${src}" /><button class="remove-img">×</button>`;
+        wrap.innerHTML = `<img src="${esc(safeImg(src))}" /><button class="remove-img">×</button>`;
         wrap.querySelector(".remove-img").addEventListener("click", () => {
           pendingImages.splice(i, 1); renderImagePreviews();
         });
@@ -531,7 +693,7 @@ class NotesManagerCard extends HTMLElement {
     const updateCategorySelect = (selectedCat = "") => {
       const sel = r.getElementById("category-select");
       sel.innerHTML = `<option value="">${this._l.no_category}</option>` +
-        this._categories.map(c => `<option value="${c}" ${c === selectedCat ? "selected" : ""}>${c}</option>`).join("") +
+        this._categories.map(c => `<option value="${esc(c)}" ${c === selectedCat ? "selected" : ""}>${esc(c)}</option>`).join("") +
         `<option value="__new__">${this._l.new_category}</option>`;
       if (selectedCat && !this._categories.includes(selectedCat)) {
         // it's a new category typed before
@@ -565,13 +727,13 @@ class NotesManagerCard extends HTMLElement {
       pendingImages = note?.images ? [...note.images] : [];
       updateCategorySelect(note?.category || "");
       const type = note?.type || "text";
-      updateTypeUI(type);
+      updateTypeUI(type);  // direct, no carry-over when opening
       updateColorUI(note?.color || "yellow");
       if (type === "checklist" && note?.checklist?.length) {
-        note.checklist.forEach(item => addChecklistRow(item.text, item.checked));
+        note.checklist.forEach(item => addChecklistRow(item.text, item.checked, false));
       }
       if (type === "numbered" && note?.checklist?.length) {
-        note.checklist.forEach(item => addNumberedRow(item.text));
+        note.checklist.forEach(item => addNumberedRow(item.text, false));
       }
       renderImagePreviews();
       r.getElementById("note-modal").classList.add("open");
@@ -579,9 +741,9 @@ class NotesManagerCard extends HTMLElement {
     };
 
     r.getElementById("add-btn").addEventListener("click", () => openModal());
-    r.getElementById("type-text-btn").addEventListener("click", () => updateTypeUI("text"));
-    r.getElementById("type-check-btn").addEventListener("click", () => updateTypeUI("checklist"));
-    r.getElementById("type-numbered-btn").addEventListener("click", () => updateTypeUI("numbered"));
+    r.getElementById("type-text-btn").addEventListener("click", () => switchType("text"));
+    r.getElementById("type-check-btn").addEventListener("click", () => switchType("checklist"));
+    r.getElementById("type-numbered-btn").addEventListener("click", () => switchType("numbered"));
     r.getElementById("color-picker").addEventListener("click", e => {
       const opt = e.target.closest(".color-option");
       if (opt) updateColorUI(opt.dataset.color);
@@ -635,8 +797,11 @@ class NotesManagerCard extends HTMLElement {
         })(),
         reminder: localInputToIso(reminderVal),
       };
-      r.getElementById("note-modal").classList.remove("open");
-      await this._saveNote(noteData, this._editingNote?.id || null);
+      const saveBtn = r.getElementById("save-btn");
+      saveBtn.disabled = true;
+      const ok = await this._saveNote(noteData, this._editingNote?.id || null);
+      saveBtn.disabled = false;
+      if (ok) r.getElementById("note-modal").classList.remove("open");
     });
     r.getElementById("confirm-cancel").addEventListener("click", () => {
       r.getElementById("confirm-modal").classList.remove("open");
@@ -679,17 +844,14 @@ class NotesManagerCard extends HTMLElement {
     await this._saveNote(dupeData);
   }
 
-  _readImageFile(file, pendingImages, callback) {
-    const reader = new FileReader();
-    reader.onload = e => { pendingImages.push(e.target.result); callback(); };
-    reader.readAsDataURL(file);
+  async _readImageFile(file, pendingImages, callback) {
+    if (!file || !file.type.startsWith("image/")) return;
+    pendingImages.push(await shrinkImage(file));
+    callback();
   }
 
-  _highlight(text, query) {
-    if (!query) return text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-    const escaped = text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-    const re = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, "gi");
-    return escaped.replace(re, "<mark>$1</mark>");
+  _highlight(text) {
+    return esc(text);  // the search term is marked afterwards with markText()
   }
 
   _formatReminder(isoString) {
@@ -724,7 +886,7 @@ class NotesManagerCard extends HTMLElement {
     }
 
     if (!notes.length) {
-      grid.innerHTML = `<div class="empty-state"><div class="icon">${this._searchQuery ? "🔍" : "📋"}</div><p>${this._searchQuery ? `${this._l.empty_search} '${this._searchQuery}'` : this._l.empty_state}</p></div>`;
+      grid.innerHTML = `<div class="empty-state"><div class="icon">${this._searchQuery ? "🔍" : "📋"}</div><p>${this._searchQuery ? `${esc(this._l.empty_search)} '${esc(this._searchQuery)}'` : esc(this._l.empty_state)}</p></div>`;
       return;
     }
 
@@ -754,37 +916,38 @@ class NotesManagerCard extends HTMLElement {
       if (note.type === "checklist" && note.checklist?.length) {
         bodyHtml = note.checklist.map((item, i) => `
           <div class="checklist-item ${item.checked ? "done" : ""}">
-            <input type="checkbox" ${item.checked ? "checked" : ""} data-note="${note.id}" data-idx="${i}" />
-            <span>${this._highlight(item.text, q)}</span>
+            <input type="checkbox" ${item.checked ? "checked" : ""} data-idx="${i}" />
+            <span>${esc(item.text)}</span>
           </div>`).join("");
       } else if (note.type === "numbered" && note.checklist?.length) {
         bodyHtml = note.checklist.map((item, i) => `
           <div class="numbered-item">
             <span class="num-badge">${i+1}.</span>
-            <span>${this._highlight(item.text, q)}</span>
+            <span>${esc(item.text)}</span>
           </div>`).join("");
       } else if (note.content) {
-        bodyHtml = `<div class="note-body">${q ? this._highlight(note.content, q) : renderMarkdown(note.content)}</div>`;
+        bodyHtml = `<div class="note-body">${renderMarkdown(note.content)}</div>`;
       }
 
-      const imagesHtml = note.images?.length
-        ? `<div class="note-images">${note.images.map(src => `<img src="${src}" data-src="${src}" class="note-img" />`).join("")}</div>` : "";
+      const imgs = (note.images || []).map(safeImg).filter(Boolean);
+      const imagesHtml = imgs.length
+        ? `<div class="note-images">${imgs.map((src, i) => `<img src="${esc(src)}" data-i="${i}" class="note-img" loading="lazy" />`).join("")}</div>` : "";
       const reminderHtml = reminder
         ? `<div class="note-reminder ${reminder.expired ? "expired" : ""}">⏰ ${reminder.str}${reminder.expired ? " " + this._l.reminder_expired : ""}</div>` : "";
       const categoryHtml = note.category
-        ? `<div class="note-category-badge">📁 ${note.category}</div>` : "";
+        ? `<div class="note-category-badge">📁 ${esc(note.category)}</div>` : "";
       const priorityLabels = { high: this._l.priority_high, medium: this._l.priority_medium, low: this._l.priority_low };
-      const priorityHtml = note.priority
-        ? `<div class="priority-badge ${note.priority}">${priorityLabels[note.priority] || ""}</div>` : "";
+      const priorityHtml = priorityLabels[note.priority]
+        ? `<div class="priority-badge ${note.priority}">${esc(priorityLabels[note.priority])}</div>` : "";
 
       card.innerHTML = `
         <div class="note-header">
           <div class="note-title-wrap">
             ${note.pinned ? '<span class="pin-badge">📌</span>' : ""}
-            <div class="note-title">${this._highlight(note.title, q)}</div>
+            <div class="note-title">${esc(note.title)}</div>
           </div>
           <div class="note-actions">
-            <button class="pin-btn" title="${note.pinned ? this._l.pin_yes : this._l.pin_no}">${note.pinned ? "📍" : "📌"}</button>
+            <button class="pin-btn" title="${esc(note.pinned ? this._l.pin_yes : this._l.pin_no)}">${note.pinned ? "📍" : "📌"}</button>
             <button class="edit-btn" title="${this._l.btn_edit || 'Bewerken'}">✏️</button>
             <button class="dupe-btn" title="${this._l.btn_duplicate || 'Dupliceren'}">📋</button>
             <button class="delete-btn" title="${this._l.btn_delete}">🗑️</button>
@@ -797,16 +960,23 @@ class NotesManagerCard extends HTMLElement {
         ${reminderHtml}
         <div class="note-date">${date}</div>
       `;
+      if (q) markText(card, q);
 
       card.querySelector(".pin-btn").addEventListener("click", e => { e.stopPropagation(); this._togglePin(note); });
       card.querySelector(".dupe-btn").addEventListener("click", e => { e.stopPropagation(); this._duplicateNote(note); });
       card.querySelector(".edit-btn").addEventListener("click", e => { e.stopPropagation(); this._openModal(note); });
       card.querySelector(".delete-btn").addEventListener("click", e => { e.stopPropagation(); this._triggerDelete(note.id); });
-      card.querySelectorAll("input[type=checkbox][data-note]").forEach(cb => {
-        cb.addEventListener("change", e => { e.stopPropagation(); this._toggleChecklistItem(cb.dataset.note, parseInt(cb.dataset.idx), cb.checked); });
+      card.querySelectorAll("input[type=checkbox][data-idx]").forEach(cb => {
+        cb.addEventListener("click", e => e.stopPropagation());
+        cb.addEventListener("change", e => { e.stopPropagation(); this._toggleChecklistItem(note.id, parseInt(cb.dataset.idx), cb.checked); });
       });
       card.querySelectorAll(".note-img").forEach(img => {
-        img.addEventListener("click", e => { e.stopPropagation(); this._openLightbox(img.dataset.src); });
+        img.addEventListener("click", e => { e.stopPropagation(); this._openLightbox(imgs[+img.dataset.i]); });
+      });
+      // 4: tap/click a note to edit it (not on links, buttons or checkboxes)
+      card.addEventListener("click", e => {
+        if (e.target.closest("a, button, input, label, .note-img")) return;
+        this._openModal(note);
       });
 
       grid.appendChild(card);
@@ -814,14 +984,16 @@ class NotesManagerCard extends HTMLElement {
   }
 }
 
-customElements.define("notes-manager-card", NotesManagerCard);
-window.customCards = window.customCards || [];
-window.customCards.push({
-  type: "notes-manager-card",
-  name: "Notes Manager",
-  description: "Notes Manager - customizable notes with categories, search, pin, reminders, Markdown, checklists and numbered lists.",
-  preview: true,
-});
+if (!customElements.get("notes-manager-card")) {
+  customElements.define("notes-manager-card", NotesManagerCard);
+  window.customCards = window.customCards || [];
+  window.customCards.push({
+    type: "notes-manager-card",
+    name: "Notes Manager",
+    description: "Notes Manager - customizable notes with categories, search, pin, reminders, Markdown, checklists and numbered lists.",
+    preview: true,
+  });
+}
 console.info(
   `%c NOTES-MANAGER-CARD %c v${CARD_VERSION} `,
   "background:#1976d2;color:white;font-weight:bold;padding:2px 6px;border-radius:4px 0 0 4px;",
