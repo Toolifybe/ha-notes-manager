@@ -3,7 +3,7 @@
 A custom Home Assistant integration to create, edit, and delete notes directly from your dashboard.
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-![Version](https://img.shields.io/badge/version-2.7.2-blue.svg)
+![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)
 
 ---
 
@@ -16,7 +16,7 @@ A custom Home Assistant integration to create, edit, and delete notes directly f
 - ✅ **Markdown support** (bold, italic, headings, code, links)
 - ✅ **Checklist / task notes**
 - ✅ **Numbered lists**
-- ✅ **Image upload** with lightbox viewer
+- ✅ **Image upload** with lightbox viewer (photos are shrunk to max 1280 px)
 - ✅ **Clickable links** (auto-detected)
 - ✅ **Search** through all notes (title, content, tasks, categories)
 - ✅ **Pin notes** to keep them at the top
@@ -26,12 +26,15 @@ A custom Home Assistant integration to create, edit, and delete notes directly f
 - ✅ Notes saved safely in your HA config directory (with `.bak` backup)
 - ✅ **Live on every device**, also for non-admin users
 - ✅ Tap a note to edit it (works on phones and tablets)
-- ✅ Frontend JS auto-copied on every HA restart
+- ✅ Card loaded automatically as a dashboard resource (with version, no cache problems)
 - ✅ Configurable card title
+- ✅ **Home Assistant look** — follows your theme (light and dark) and primary color, Material Design icons
+- ✅ **Category cards** — `category:` shows only one category (e.g. a "Winkel" card)
+- ✅ **Visual editor** — title, category and default color
 - ✅ **Duplicate notes**
 - ✅ **Priority levels** (high 🔴 / normal 🟡 / low 🟢) with visual badge and smart sorting
 - ✅ **Fully customizable labels** (multilingual support)
-- ✅ Automation support via HA services
+- ✅ Automation support via HA services (title, content, checklist items, category, priority, pin, reminder)
 
 ---
 
@@ -63,43 +66,50 @@ notes_manager:
 type: custom:notes-manager-card
 ```
 
-Optionally set a custom title:
+The integration adds the card as a dashboard resource itself (since v3.0.0):
+`/notes_manager/notes-manager-card.js?v=…`. An old manual resource
+`/local/community/ha-notes-manager/notes-manager-card.js` is replaced automatically.
+After an update: restart HA and refresh the page (Ctrl+F5) once.
+Dashboards in YAML mode: add `/notes_manager/notes-manager-card.js` as a JavaScript module yourself.
+
+### Card options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `title` | Notities | Title in the header |
+| `category` | — | Only show notes of this category; new notes get it automatically |
+| `default_color` | `yellow` | Color for new notes: yellow, blue, green, pink, purple, orange |
+| `labels` | — | Translate or rename texts (see below) |
 
 ```yaml
 type: custom:notes-manager-card
-title: "🛒 Boodschappen"
+title: Boodschappen
+category: Winkel
+default_color: green
 ```
 
-### Step 5: Add the resource
-
-Go to **Settings → Dashboards → Resources** and add:
-
-- **URL:** `/local/community/ha-notes-manager/notes-manager-card.js`
-- **Type:** JavaScript module
-
-> 💡 The JS file is automatically copied to the correct location on every HA restart.
 Optionally customize all labels (e.g. English):
 
 ```yaml
 type: custom:notes-manager-card
-title: "📝 My Notes"
+title: "My Notes"
 labels:
-  type_text: "📝 Text"
-  type_checklist: "✅ Checklist"
-  type_numbered: "🔢 Numbered"
+  type_text: "Text"
+  type_checklist: "Checklist"
+  type_numbered: "Numbered"
   field_title: "Title"
   field_content: "Content"
-  field_category: "📁 Category"
-  field_reminder: "⏰ Reminder (optional)"
+  field_category: "Category"
+  field_reminder: "Reminder (optional)"
   field_images: "Images"
   field_color: "Color"
   btn_save: "Save"
   btn_cancel: "Cancel"
-  btn_add_task: "+ Add task"
-  btn_add_item: "+ Add item"
-  pin_label: "📌 Pin to top"
+  btn_add_task: "Add task"
+  btn_add_item: "Add item"
+  pin_label: "Pin to top"
   no_category: "— No category —"
-  new_category: "➕ New category..."
+  new_category: "New category..."
   empty_state: "No notes. Click + to start."
   search_placeholder: "Search notes..."
   filter_all: "All"
@@ -113,12 +123,12 @@ labels:
   title_placeholder: "Enter a title..."
   pin_yes: "Unpin"
   pin_no: "Pin"
-  reminder_expired: "(expired)"
+  reminder_expired: "expired)"
   field_priority: "Priority"
   priority_none: "— No priority —"
-  priority_low: "🟢 Low"
-  priority_medium: "🟡 Normal"
-  priority_high: "🔴 High"
+  priority_low: "Low"
+  priority_medium: "Normal"
+  priority_high: "High"
 ```
 
 > 💡 All labels are optional — any label you omit will fall back to the Dutch default.
@@ -155,6 +165,20 @@ ha-notes-manager/
 | `title`   | string | ✅        | Title of the note       |
 | `content` | string | ❌        | Content of the note     |
 | `color`   | string | ❌        | Color (default: yellow) |
+| `type`    | string | ❌        | `text`, `checklist` or `numbered` |
+| `items`   | list   | ❌        | Checklist items (makes a checklist if no type is given) |
+| `category`| string | ❌        | Category |
+| `priority`| string | ❌        | `low`, `medium` or `high` |
+| `pinned`  | bool   | ❌        | Pin to the top |
+| `reminder`| datetime | ❌      | Reminder (HA time zone) |
+
+```yaml
+action: notes_manager.add_note
+data:
+  title: Boodschappen
+  items: [Melk, Brood, Kaas]
+  category: Winkel
+```
 
 ### `notes_manager.update_note`
 
@@ -164,6 +188,7 @@ ha-notes-manager/
 | `title`    | string | ❌        | New title                    |
 | `content`  | string | ❌        | New content                  |
 | `color`    | string | ❌        | New color                    |
+| `type`, `items`, `category`, `priority`, `pinned`, `reminder` | | ❌ | Same as `add_note` |
 
 ### `notes_manager.delete_note`
 
@@ -234,9 +259,9 @@ Each note can have an optional priority. Notes are automatically sorted by prior
 
 | Value | Label | Color |
 |-------|-------|-------|
-| `high` | 🔴 Hoog | Red badge |
-| `medium` | 🟡 Normaal | Yellow badge |
-| `low` | 🟢 Laag | Green badge |
+| `high` | Hoog | Red badge |
+| `medium` | Normaal | Yellow badge |
+| `low` | Laag | Green badge |
 | *(empty)* | — | No badge |
 
 Sort order: **pinned** → **high** → **medium** → **low** → **none** → most recently updated.
@@ -260,6 +285,16 @@ Live updates use the websocket command `notes_manager/subscribe` (works for all 
 ---
 
 ## 📋 Changelog
+
+### v3.0.0
+- 🎨 New look in Home Assistant style, like the Meal Planner and Home Energy Flow Card: follows your theme (light **and dark**), header with note count, open tasks and today's reminders, Material Design icons instead of emoji, notes tinted in their color
+- 🗂️ `category:` option: a card that only shows (and creates) notes of one category; `default_color:` option
+- ⚙️ Visual card editor (title, category, default color)
+- 🔌 The integration adds the card as a dashboard resource itself (with version in the link) and replaces the old manual `/local/community/...` resource
+- 🖼️ Old large photos are shrunk when you save the note
+- 🤖 Services `add_note` / `update_note` accept type, items, category, priority, pinned and reminder
+- ⌨️ Enter in a checklist adds the next item; click next to a dialog closes it
+- ⚠️ Default texts no longer contain emoji (icons come from the card). Custom `labels:` keep working.
 
 ### v2.7.2
 - 🛡️ A damaged notes file is never treated as empty anymore (could wipe all notes); safe writes with `.bak` backup

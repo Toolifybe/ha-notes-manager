@@ -33,6 +33,50 @@ add_note:
             - purple
             - orange
 
+    type:
+      name: Type
+      description: text, checklist of numbered.
+      required: false
+      selector:
+        select:
+          options:
+            - text
+            - checklist
+            - numbered
+    items:
+      name: Items
+      description: Lijst met taken of items (maakt een checklist als er geen type is).
+      required: false
+      example: '["Melk", "Brood"]'
+      selector:
+        object:
+    category:
+      name: Categorie
+      required: false
+      example: "Winkel"
+      selector:
+        text:
+    priority:
+      name: Prioriteit
+      required: false
+      selector:
+        select:
+          options:
+            - low
+            - medium
+            - high
+    pinned:
+      name: Vastgepind
+      required: false
+      selector:
+        boolean:
+    reminder:
+      name: Herinnering
+      description: Datum en uur voor de herinnering.
+      required: false
+      selector:
+        datetime:
+
 update_note:
   name: Notitie bijwerken
   description: Werk een bestaande notitie bij.
@@ -70,6 +114,50 @@ update_note:
             - pink
             - purple
             - orange
+
+    type:
+      name: Type
+      description: text, checklist of numbered.
+      required: false
+      selector:
+        select:
+          options:
+            - text
+            - checklist
+            - numbered
+    items:
+      name: Items
+      description: Lijst met taken of items (maakt een checklist als er geen type is).
+      required: false
+      example: '["Melk", "Brood"]'
+      selector:
+        object:
+    category:
+      name: Categorie
+      required: false
+      example: "Winkel"
+      selector:
+        text:
+    priority:
+      name: Prioriteit
+      required: false
+      selector:
+        select:
+          options:
+            - low
+            - medium
+            - high
+    pinned:
+      name: Vastgepind
+      required: false
+      selector:
+        boolean:
+    reminder:
+      name: Herinnering
+      description: Datum en uur voor de herinnering.
+      required: false
+      selector:
+        datetime:
 
 delete_note:
   name: Notitie verwijderen

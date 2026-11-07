@@ -43,11 +43,22 @@ QUIET_FIELDS = ("pinned",)
 # A reminder that was missed while HA was off is still sent if it is this recent
 MISSED_REMINDER_WINDOW = timedelta(hours=12)
 
+COLORS = ["yellow", "blue", "green", "pink", "purple", "orange"]
+EXTRA_FIELDS = {
+    vol.Optional("type"): vol.In(["text", "checklist", "numbered"]),
+    vol.Optional("items"): vol.All(cv.ensure_list, [cv.string]),
+    vol.Optional("category"): cv.string,
+    vol.Optional("priority"): vol.In(["", "low", "medium", "high"]),
+    vol.Optional("pinned"): cv.boolean,
+    vol.Optional("reminder"): vol.Any(None, cv.datetime),
+}
+
 SERVICE_ADD_NOTE_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_TITLE): cv.string,
         vol.Optional(ATTR_CONTENT, default=""): cv.string,
-        vol.Optional(ATTR_COLOR, default="yellow"): cv.string,
+        vol.Optional(ATTR_COLOR, default="yellow"): vol.In(COLORS),
+        **EXTRA_FIELDS,
     }
 )
 
@@ -56,7 +67,8 @@ SERVICE_UPDATE_NOTE_SCHEMA = vol.Schema(
         vol.Required(ATTR_NOTE_ID): cv.string,
         vol.Optional(ATTR_TITLE): cv.string,
         vol.Optional(ATTR_CONTENT): cv.string,
-        vol.Optional(ATTR_COLOR): cv.string,
+        vol.Optional(ATTR_COLOR): vol.In(COLORS),
+        **EXTRA_FIELDS,
     }
 )
 
@@ -154,6 +166,20 @@ def _is_quiet_change(note: dict, body: dict) -> bool:
         elif body[field] != note.get(field):
             return False
     return True
+
+
+def _service_body(data: dict) -> dict:
+    """Service data → note fields ("items" becomes the checklist)."""
+    body = {k: v for k, v in data.items() if k not in ("items", "reminder", ATTR_NOTE_ID)}
+    if "items" in data:
+        body["checklist"] = [{"text": t, "checked": False} for t in data["items"] if str(t).strip()]
+        body.setdefault("type", "checklist")
+    if "reminder" in data:
+        when = data["reminder"]
+        if when is not None and when.tzinfo is None:
+            when = when.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        body["reminder"] = dt_util.as_utc(when).isoformat() if when else None
+    return body
 
 
 def _build_note(body: dict, existing: dict | None = None) -> dict:
@@ -288,13 +314,72 @@ def _ws_subscribe(hass, connection, msg):
     connection.send_result(msg["id"])
 
 
+CARD_URL = "/notes_manager/notes-manager-card.js"
+OLD_CARD_URL = "/local/community/ha-notes-manager/notes-manager-card.js"
+
+
+async def _register_card(hass: HomeAssistant) -> None:
+    """Serve the card and add it as a dashboard resource with a version in the
+    link, so browsers get the new file after an update (no manual resource)."""
+    from homeassistant.helpers.start import async_at_started
+
+    path = os.path.join(os.path.dirname(__file__), "frontend", "notes-manager-card.js")
+    try:
+        from homeassistant.components.http import StaticPathConfig
+        await hass.http.async_register_static_paths([StaticPathConfig(CARD_URL, path, False)])
+    except ImportError:  # Home Assistant before 2024.7
+        hass.http.register_static_path(CARD_URL, path, False)
+    stamp = int(await hass.async_add_executor_job(os.path.getmtime, path))
+    url = f"{CARD_URL}?v={stamp}"
+
+    async def add_resource(_hass):
+        try:
+            await _ensure_resource(hass, url)
+        except Exception as err:  # never block the integration for this
+            _LOGGER.warning("Notes Manager: could not add the dashboard resource (%s). "
+                            "Add %s as a JavaScript module under Dashboards → Resources.", err, CARD_URL)
+
+    async_at_started(hass, add_resource)
+
+
+async def _ensure_resource(hass: HomeAssistant, url: str) -> None:
+    """Create or update the Lovelace resource (storage mode). The old manual
+    /local/community/... resource is turned into the new one, so the card
+    isn't loaded twice."""
+    lovelace = hass.data.get("lovelace")
+    resources = getattr(lovelace, "resources", None)
+    if resources is None and isinstance(lovelace, dict):
+        resources = lovelace.get("resources")
+    if resources is None or not hasattr(resources, "async_create_item"):
+        _LOGGER.info("Notes Manager: dashboards in YAML mode; add %s as a resource yourself", CARD_URL)
+        return
+    if not getattr(resources, "loaded", True):
+        await resources.async_load()
+        resources.loaded = True
+
+    mine = [i for i in resources.async_items()
+            if str(i.get("url", "")).split("?")[0] in (CARD_URL, OLD_CARD_URL)]
+    if not mine:
+        await resources.async_create_item({"res_type": "module", "url": url})
+        _LOGGER.info("Notes Manager: resource %s added", url)
+        return
+    first, *rest = mine
+    if first.get("url") != url:
+        await resources.async_update_item(first["id"], {"res_type": "module", "url": url})
+        _LOGGER.info("Notes Manager: resource updated to %s", url)
+    for extra in rest:  # e.g. both the old and the new one
+        await resources.async_delete_item(extra["id"])
+
+
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    # keep copying for anyone still using the old manual resource
     await hass.async_add_executor_job(_copy_frontend, hass)
+    await _register_card(hass)
     store = NotesStore(hass)
     hass.data[DOMAIN] = store
 
     async def handle_add_note(call: ServiceCall) -> None:
-        note = _build_note(dict(call.data))
+        note = _build_note(_service_body(dict(call.data)))
         try:
             await store.update(lambda data: data["notes"].append(note))
         except DataFileError as err:
@@ -307,7 +392,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         def change(data):
             for note in data["notes"]:
                 if note.get("id") == note_id:
-                    return _build_note(dict(call.data), existing=note)
+                    return _build_note(_service_body(dict(call.data)), existing=note)
             return None
 
         try:
