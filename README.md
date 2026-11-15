@@ -3,7 +3,7 @@
 A custom Home Assistant integration to create, edit, and delete notes directly from your dashboard.
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-3.0.1-blue.svg)
 
 ---
 
@@ -150,6 +150,7 @@ ha-notes-manager/
         ├── manifest.json
         ├── services.yaml
         ├── strings.json
+        ├── brand/            # icon (light and dark), Home Assistant 2026.3+
         └── frontend/
             └── notes-manager-card.js
 ```
@@ -285,6 +286,9 @@ Live updates use the websocket command `notes_manager/subscribe` (works for all 
 ---
 
 ## 📋 Changelog
+
+### v3.0.1
+- 🖼️ Own icon (light and dark) in `brand/`, shown in Settings → Devices & services from Home Assistant 2026.3.
 
 ### v3.0.0
 - 🎨 New look in Home Assistant style, like the Meal Planner and Home Energy Flow Card: follows your theme (light **and dark**), header with note count, open tasks and today's reminders, Material Design icons instead of emoji, notes tinted in their color

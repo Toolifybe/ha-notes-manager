@@ -1,9 +1,9 @@
 /**
  * Notes Manager Card for Home Assistant
- * v3.0.0
+ * v3.0.1
  */
 
-const CARD_VERSION = "3.0.0";
+const CARD_VERSION = "3.0.1";
 
 const DEFAULT_LABELS = {
   title: "Notities",
